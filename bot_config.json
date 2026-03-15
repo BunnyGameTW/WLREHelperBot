@@ -1,0 +1,35 @@
+{
+    "wait_times": {
+        "scan_interval": 1.0,
+        "after_click": 0.1,
+        "pop_window": 0.1,
+        "battle_unlock": 1.0,
+        "join_confirm": 0.1,
+        "wait_battle_check": 30.0
+    },
+    "energy_strategy": false,
+    "device_configs": {
+        "emulator-5554": true,
+        "emulator-5556": true
+    },
+    "thresholds": {
+        "PC": {
+            "title": 0.8,
+            "btn_add": 0.8,
+            "btn_confirm": 0.8,
+            "btn_join": 0.8,
+            "in_battle": 0.8,
+            "energy_low": 0.9,
+            "energy_9": 0.92
+        },
+        "EMU": {
+            "title": 0.7,
+            "btn_add": 0.7,
+            "btn_confirm": 0.7,
+            "btn_join": 0.7,
+            "in_battle": 0.7,
+            "energy_low": 0.74,
+            "energy_9": 0.88
+        }
+    }
+}
