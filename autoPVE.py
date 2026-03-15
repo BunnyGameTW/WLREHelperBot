@@ -1,7 +1,7 @@
 import win32gui, win32ui, win32con, win32api
 import cv2
 import numpy as np
-import time, os, ctypes, json, threading, subprocess, re
+import time, os, ctypes, json, threading, subprocess, re, sys
 import pydirectinput
 from ppadb.client import Client as AdbClient
 from copy import deepcopy
@@ -68,10 +68,14 @@ except:
 
 LANGUAGE = "zh_TW"  # 可選: "zh_TW", "zh_CN", "en"
 
+def resource_path(relative_path):
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
 def load_localization(language="zh_TW"):
     """加載多語言配置"""
     try:
-        with open("localization.json", "r", encoding="utf-8") as f:
+        with open(resource_path("localization.json"), "r", encoding="utf-8") as f:
             localization = json.load(f)
         return localization.get(language, localization["zh_TW"])
     except Exception as e:
@@ -94,7 +98,7 @@ CONFIG_FILE = "bot_config.json"
 def load_default_config():
     """從 default_config.json 加載預設配置"""
     try:
-        with open("default_config.json", "r", encoding="utf-8") as f:
+        with open(resource_path("default_config.json"), "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"Failed to load default_config.json: {e}")
@@ -307,7 +311,9 @@ def load_templates():
     """載入共用模板"""
     global LOADED_TEMPLATES
     LOADED_TEMPLATES = {}
-    folder = "templates"
+    folder = resource_path("templates")
+    if not os.path.exists(folder):
+        folder = os.path.join(os.path.abspath("."), "templates")
     bot_log("FOLDER", f"正在載入 {folder} 資料夾內的模板...")
 
     if not os.path.exists(folder):

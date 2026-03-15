@@ -44,12 +44,16 @@ except Exception as e:
     print(f"Warning: Cannot import autoPVE: {e}")
     AUTOPVE_AVAILABLE = False
 
+def resource_path(relative_path):
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
 # ========== 語言加載系統 ==========
 
 def load_localization(language="zh_TW"):
     """加載多語言配置"""
     try:
-        with open("localization.json", "r", encoding="utf-8") as f:
+        with open(resource_path("localization.json"), "r", encoding="utf-8") as f:
             localization = json.load(f)
         return localization.get(language, localization.get("zh_TW", {}))
     except Exception as e:
@@ -59,7 +63,7 @@ def load_localization(language="zh_TW"):
 def load_localization_with_validation(language="zh_TW"):
     """加載多語言配置並檢查缺失值，自動從 zh_TW 回退"""
     try:
-        with open("localization.json", "r", encoding="utf-8") as f:
+        with open(resource_path("localization.json"), "r", encoding="utf-8") as f:
             localization = json.load(f)
         
         # 取得 zh_TW 作為後備語言
@@ -312,7 +316,7 @@ class MainGUI(QMainWindow):
             }
         }
         try:
-            with open("default_config.json", "r", encoding="utf-8") as f:
+            with open(resource_path("default_config.json"), "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return fallback
@@ -590,8 +594,9 @@ class MainGUI(QMainWindow):
     def apply_app_icon(self):
         icon_candidates = ["app.ico", "app.png"]
         for filename in icon_candidates:
-            if os.path.exists(filename):
-                self.setWindowIcon(QIcon(filename))
+            icon_path = resource_path(filename)
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
                 break
 
     def get_selected_device_names(self):
@@ -1084,7 +1089,10 @@ class MainGUI(QMainWindow):
             for i in range(self.device_list.count()):
                 item = self.device_list.item(i)
                 if item.checkState() == Qt.Checked:
-                    device = self.device_map.get(item.text())
+                    serial = item.data(Qt.UserRole)
+                    if not serial:
+                        serial = item.text()
+                    device = self.device_map.get(serial)
                     if device:
                         selected_devices.append(device)
             
@@ -1390,13 +1398,13 @@ class MainGUI(QMainWindow):
                 for device in devices:
                     # 問題 #5: 直接顯示 device.serial
                     display_name = self.build_device_display_name(device)
-                    self.device_map[display_name] = device
+                    serial = getattr(device, "serial", None) or display_name
+                    self.device_map[serial] = device
                     
                     # 問題 #6: 創建可勾選的項
                     item = QListWidgetItem(display_name)
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                     item.setCheckState(Qt.Unchecked)
-                    serial = getattr(device, "serial", None) or display_name
                     item.setData(Qt.UserRole, serial)
                     self.device_list.addItem(item)
 

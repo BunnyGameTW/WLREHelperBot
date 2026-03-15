@@ -11,8 +11,6 @@ __pycache__/
 .coverage.*
 coverage.xml
 
-build/
-dist/
 *.egg-info/
 
 .venv/
@@ -26,6 +24,13 @@ env/
 *.log
 *.tmp
 *.bak
+
+bot_config.json
+build/
+dist/
+output/
+*.spec
+tools/
 
 Thumbs.db
 Desktop.ini
