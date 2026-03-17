@@ -808,13 +808,14 @@ class DriftBot(threading.Thread):
 
 # --- 主流程 ---
 
-def main(from_gui=False, log_queue=None, config_override=None):
+def main(from_gui=False, log_queue=None, config_override=None, mode_override=None):
     """
     主函數
     Args:
         from_gui: 是否從 GUI 啟動
         log_queue: 可選的日誌隊列（來自 GUI）
         config_override: 可選的配置覆蓋（來自 GUI）
+        mode_override: 可選的模式預設 ("1"=PC, "2"=EMU)，跳過互動選擇
     """
     # 如果從 GUI 啟動，使用 GUI 提供的配置
     global RUNNING_CONFIG, RUNNING_FROM_GUI
@@ -839,7 +840,12 @@ def main(from_gui=False, log_queue=None, config_override=None):
         print("p       - 暫停/繼續偵測")
         print("Ctrl+C  - 停止腳本")
         print("="*50)
-        mode = input("\n請選擇模式 (1/2): ").strip()
+        if mode_override:
+            mode = mode_override
+            mode_name = "PC 模式" if mode == "1" else "模擬器模式"
+            print(f"\n[INFO] 已預設模式: {mode_name}")
+        else:
+            mode = input("\n請選擇模式 (1/2): ").strip()
     else:
         # ===== GUI 模式：使用提供的配置 =====
         mode = RUNNING_CONFIG.get("mode", "2")
