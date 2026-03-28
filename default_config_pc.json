@@ -1,0 +1,23 @@
+{
+    "wait_times": {
+        "scan_interval": 1.0,
+        "after_click": 0.1,
+        "pop_window": 0.1,
+        "battle_unlock": 1.0,
+        "join_confirm": 0.1,
+        "wait_battle_check": 30.0
+    },
+    "energy_strategy": false,
+    "thresholds": {
+        "PC": {
+            "title": 0.80,
+            "btn_add": 0.80,
+            "btn_confirm": 0.80,
+            "btn_join": 0.80,
+            "in_battle": 0.80,
+            "energy_low": 0.90,
+            "energy_9": 0.92
+        }
+    },
+    "device_configs": {}
+}

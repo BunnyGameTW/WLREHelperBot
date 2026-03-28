@@ -1,4 +1,5 @@
 PyQt5
+pywin32
 numpy
 opencv-python-headless
 pydirectinput

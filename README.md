@@ -1,59 +1,63 @@
 ﻿# WLREPVEBot
 
-這是一個用於自動化 PVE 操作的 Windows 專案，提供 GUI 與 CLI 兩種模式。  
-GUI 介面支援多裝置與個別活力策略，並提供多語系切換。
+這是一個用於自動化 PVE 操作的 Windows 專案，提供 PC GUI、EMU GUI 與 CMD 三種啟動方式。
+
+## 版本資訊
+- 目前版本：`0.1.6`
 
 ## 功能重點
-- GUI 模式（建議）：選擇模式、裝置、設定參數並啟動/暫停/停止
-- CLI 模式：以命令列互動控制（可選）
-- PC 視窗模式 / 模擬器模式
-- 可自訂等待時間、辨識閾值、活力策略
-- 多語系介面（`localization.json`）
-- 模擬器名稱顯示：優先使用雷電自訂名稱，找不到則回退裝置型號
+- PC 模式 GUI：控制本地遊戲視窗
+- EMU 模式 GUI：僅支援 LDPlayer，支援多開與個別設備策略
+- CMD 模式：支援 Ctrl+D / Ctrl+P / Ctrl+C 快捷鍵控制
+- 多語系介面：繁中 / 簡中 / English
+- 設定分離：PC 使用 `bot_config_pc.json`，EMU 使用 `bot_config_emu.json`
+
+## 啟動方式
+
+### 啟動選單
+```bat
+start_gui.bat
+```
+
+### 直接啟動
+```bat
+python launcher.py
+python launcher_emu.py
+python launcher_cmd.py
+python autoPVE.py
+```
 
 ## 環境需求
 - Windows 10/11
-- Python 3.7+
-- 依賴套件（見 `requirements.txt`）
+- Python 3.10+
+- 相依套件見 `requirements.txt`
 
-## 快速開始（GUI）
-1. 雙擊 `start_gui.bat`
-2. 選擇模式與裝置
-3. 調整設定後按「啟動」
+## 打包
 
-## 設定檔
-- `default_config.json`：系統預設值
-- `bot_config.json`：你儲存的設定（建議保留在本機，不要提交）
-- `localization.json`：多語系文字
-
-## 資料夾說明
-- `templates/`：影像辨識模板
-- `debug/`：除錯用測試腳本與截圖
-- `output/`：打包後的執行檔輸出位置（已加入 .gitignore）
-
-## 打包成可執行檔（無 Python）
-本專案可使用 PyInstaller 產出單一執行檔：
-
-```bash
-python -m pip install pyinstaller
-pyinstaller --noconsole --onefile ^
-  --name WLREPVEBot ^
-  --icon app.ico ^
-  --exclude-module pyaudio ^
-  --add-data "app.ico;." ^
-  --add-data "templates;templates" ^
-  --add-data "localization.json;." ^
-  --add-data "default_config.json;." ^
-  --add-data "bot_config.json;." ^
-  --add-binary "adb.exe;." ^
-  --add-binary "AdbWinApi.dll;." ^
-  --add-binary "AdbWinUsbApi.dll;." ^
-  --distpath output ^
-  main_gui.py
+### PC 版本
+```bat
+pyinstaller --clean --noconfirm --distpath output --workpath build/pc_build WLREPVEBot_PC.spec
 ```
 
-輸出位置：`output/WLREPVEBot.exe`
+輸出：`output/WLREPVEBot_PC.exe`
+
+### EMU 版本
+```bat
+pyinstaller --clean --noconfirm --distpath output --workpath build/emu_build WLREPVEBot_EMU.spec
+```
+
+輸出：`output/WLREPVEBot_EMU.exe`
+
+## 設定檔
+- `default_config_pc.json`：PC 預設設定
+- `default_config_emu.json`：EMU 預設設定
+- `bot_config_pc.json`：PC 使用者設定
+- `bot_config_emu.json`：EMU 使用者設定
+- `localization.json`：多語系文字
+
+## 文件
+- 完整變更歷史：`CHANGELOG.md`
 
 ## 備註
 - 若防毒誤判，可將輸出檔加入信任清單。
-- 模擬器名稱顯示若無法取得自訂名稱，會回退顯示裝置型號。
+- LDPlayer 若安裝於非預設位置，請在 EMU 設定頁指定安裝路徑。
