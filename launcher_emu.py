@@ -47,72 +47,39 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-# 模擬器啟動器進程關鍵字（非實際遊戲設備，應過濾掉）
-EMU_LAUNCHER_KEYWORDS = [
-    "launcher", "player", "multiplayer", "multi", "manager",
-    "dnmultiplayer", "dnplayer", "mumuplayer", "mumumulti",
-    "noxmulti", "bstweaker", "bluestacks_nxt"
-]
-
-# MuMu 常見 ADB 連接埠
-MUMU_ADB_PORTS = [16384, 16416, 16448, 16480, 16512, 16544, 16576]
-
-
-def _try_connect_mumu_ports(client):
-    """嘗試連接 MuMu 模擬器的常見 ADB 埠"""
-    import subprocess
-    for port in MUMU_ADB_PORTS:
-        addr = f"127.0.0.1:{port}"
-        try:
-            subprocess.run(
-                ["adb", "connect", addr],
-                capture_output=True, timeout=3
-            )
-        except Exception:
-            pass
-
-
-def _is_emu_launcher(device):
-    """判斷設備是否為模擬器啟動器/管理器（非實際遊戲設備）"""
-    serial = getattr(device, 'serial', str(device)).lower()
-    # 啟動器通常不會有標準 ADB 埠格式
-    # 透過 shell 取得 activity 判斷
+def get_app_version():
+    """讀取版本號（優先 VERSION 檔）"""
     try:
-        # 檢查 getprop 看是否有模擬器進程標記
-        top_activity = device.shell("dumpsys activity activities | grep mResumedActivity").strip().lower()
-        for kw in EMU_LAUNCHER_KEYWORDS:
-            if kw in top_activity:
-                return True
+        with open(resource_path("VERSION"), "r", encoding="utf-8") as f:
+            version = f.read().strip()
+            if version:
+                return version
     except Exception:
         pass
-    return False
+    return "0.1.0"
+
+
+APP_VERSION = get_app_version()
 
 
 class DetectThread(QThread):
-    """設備檢測線程 - 使用 ADB 直接偵測以取得 ppadb Device 對象"""
+    """設備檢測線程 - 只偵測 LDPlayer 設備"""
     devices_found = pyqtSignal(list)
 
     def run(self):
         try:
             if AUTOPVE_AVAILABLE:
-                # 先嘗試連接 MuMu 的 ADB 埠
-                from ppadb.client import Client as AdbClient
-                try:
-                    client = AdbClient(host="127.0.0.1", port=5037)
-                    _try_connect_mumu_ports(client)
-                except Exception:
-                    pass
-
+                from core.device_utils import is_ldplayer_device
                 devices = autoPVE.connect_adb()
                 result = []
                 for d in devices:
+                    # 只保留 LDPlayer 設備
+                    if not is_ldplayer_device(d.serial):
+                        continue
                     # 驗證設備是否仍然連線
                     try:
                         d.shell("echo ok")
                     except Exception:
-                        continue  # 跳過無回應的設備
-                    # 過濾啟動器進程
-                    if _is_emu_launcher(d):
                         continue
                     display_name = autoPVE.get_device_display_name(d)
                     result.append({
@@ -122,10 +89,7 @@ class DetectThread(QThread):
                     })
                 self.devices_found.emit(result)
             else:
-                from emulator.emulator_manager import EmulatorDeviceManager
-                manager = EmulatorDeviceManager()
-                devices = manager.detect_devices(force_refresh=True)
-                self.devices_found.emit(devices)
+                self.devices_found.emit([])
         except Exception as e:
             print(f"[ERROR] 設備檢測失敗: {e}")
             self.devices_found.emit([])
@@ -186,7 +150,7 @@ class EmuMainWindow(QMainWindow):
         # 初始化多語言
         init_i18n("zh_TW")
 
-        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + " - EMU v1.0")
+        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + f" - EMU v{APP_VERSION}")
         self.setGeometry(100, 100, 1400, 900)
         self.apply_app_icon()
 
@@ -269,7 +233,7 @@ class EmuMainWindow(QMainWindow):
     def _load_config(self):
         """加載使用者配置"""
         try:
-            config_path = "bot_config.json"
+            config_path = "bot_config_emu.json"
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
@@ -289,7 +253,7 @@ class EmuMainWindow(QMainWindow):
     def _save_config(self):
         """保存配置"""
         try:
-            config_path = "bot_config.json"
+            config_path = "bot_config_emu.json"
             config_data = {}
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
@@ -320,11 +284,30 @@ class EmuMainWindow(QMainWindow):
             self.append_log(f"[ERROR] 保存設定失敗: {e}")
 
     def _apply_config_to_ui(self):
-        """將載入的配置套用到 UI 控件"""
+        """將載入的配置套用到 UI 控件，並將 LDPlayer 路徑注入核心偵測"""
         emu_paths = self.current_config.get("emulator_paths", {})
         for key, path in emu_paths.items():
             if key in self.emulator_path_inputs:
                 self.emulator_path_inputs[key].setText(path)
+        # 若有設定 LDPlayer 路徑，注入到核心偵測快取
+        ld_path = emu_paths.get("ldplayer", "")
+        if ld_path and AUTOPVE_AVAILABLE:
+            self._inject_ldplayer_path(ld_path)
+
+    def _inject_ldplayer_path(self, ld_dir):
+        """將使用者設定的 LDPlayer 路徑注入到核心偵測"""
+        try:
+            from core.device_utils import LDPLAYER_CONSOLE_CACHE
+            import os
+            for exe in ["ldconsole.exe", "dnconsole.exe"]:
+                path = os.path.join(ld_dir, exe)
+                if os.path.exists(path):
+                    LDPLAYER_CONSOLE_CACHE["path"] = path
+                    LDPLAYER_CONSOLE_CACHE["instances"] = None  # 強制重新讀取
+                    LDPLAYER_CONSOLE_CACHE["ts"] = 0.0
+                    break
+        except Exception:
+            pass
 
     def init_ui(self):
         """初始化 UI"""
@@ -387,7 +370,7 @@ class EmuMainWindow(QMainWindow):
 
     def update_ui_texts(self):
         """更新所有 UI 文字為當前語言"""
-        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + " - EMU v1.0")
+        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + f" - EMU v{APP_VERSION}")
 
         # 標籤頁
         self.tabs.setTabText(0, t("app_launch", "啟動"))
@@ -410,7 +393,7 @@ class EmuMainWindow(QMainWindow):
         if not self.is_paused:
             self.pause_btn.setText(t("btn_pause", "暫停"))
         else:
-            self.pause_btn.setText(t("resumed", "繼續"))
+            self.pause_btn.setText(t("btn_resume", "繼續執行"))
 
         if not self.is_debug:
             self.debug_btn.setText(t("btn_debug", "除錯模式"))
@@ -450,7 +433,11 @@ class EmuMainWindow(QMainWindow):
         self.energy_check.setText(t("stop_waiting", "低活力時停止（不補充）"))
 
         self.device_energy_group.setTitle(t("device_strategy_config", "每台設備活力策略"))
-        self.emu_path_group.setTitle("模擬器安裝路徑設定")
+        self.device_energy_info.setText(t("device_strategy_hint", "先在啟動頁選擇設備，才可設定個別策略。"))
+        self.emu_path_group.setTitle(t("ldplayer_install_path", "LDPlayer 安裝路徑設定"))
+        for btn in self.browse_buttons.values():
+            btn.setText(t("btn_browse", "瀏覽"))
+        self.update_device_energy_settings()
 
         self.save_btn.setText(t("config_change", "保存設定"))
         self.restore_btn.setText(t("btn_restore_defaults", "恢復預設"))
@@ -621,34 +608,27 @@ class EmuMainWindow(QMainWindow):
         # === 模擬器路徑 + 每台設備活力策略：左右兩欄 ===
         bottom_columns = QHBoxLayout()
 
-        # --- 左欄：模擬器路徑設定 ---
-        self.emu_path_group = QGroupBox("模擬器安裝路徑設定")
+        # --- 左欄：LDPlayer 路徑設定 ---
+        self.emu_path_group = QGroupBox(t("ldplayer_install_path", "LDPlayer 安裝路徑設定"))
         emu_path_layout = QFormLayout()
 
         self.emulator_path_inputs = {}
         self.browse_buttons = {}
-        emulator_names = {
-            "bluestacks": "BlueStacks",
-            "ldplayer": "LD Player",
-            "nox": "Nox",
-            "mumu": "MuMu"
-        }
 
-        for key, label_text in emulator_names.items():
-            path_layout = QHBoxLayout()
-            path_input = QLineEdit()
-            path_input.setPlaceholderText(f"C:\\Program Files\\{label_text}")
-            path_input.textChanged.connect(self.on_config_changed)
-            self.emulator_path_inputs[key] = path_input
-            path_layout.addWidget(path_input)
+        path_layout = QHBoxLayout()
+        path_input = QLineEdit()
+        path_input.setPlaceholderText(r"D:\LDPlayer")
+        path_input.textChanged.connect(self.on_config_changed)
+        self.emulator_path_inputs["ldplayer"] = path_input
+        path_layout.addWidget(path_input)
 
-            browse_btn = QPushButton("[瀏覽]")
-            browse_btn.setMaximumWidth(60)
-            browse_btn.clicked.connect(lambda checked, k=key: self.browse_emulator_path(k))
-            self.browse_buttons[key] = browse_btn
-            path_layout.addWidget(browse_btn)
+        browse_btn = QPushButton(t("btn_browse", "瀏覽"))
+        browse_btn.setMaximumWidth(60)
+        browse_btn.clicked.connect(lambda checked: self.browse_emulator_path("ldplayer"))
+        self.browse_buttons["ldplayer"] = browse_btn
+        path_layout.addWidget(browse_btn)
 
-            emu_path_layout.addRow(label_text + ":", path_layout)
+        emu_path_layout.addRow("LDPlayer:", path_layout)
 
         self.emu_path_group.setLayout(emu_path_layout)
         bottom_columns.addWidget(self.emu_path_group)
@@ -753,7 +733,7 @@ class EmuMainWindow(QMainWindow):
         self.device_energy_checks.clear()
 
         if not self.selected_devices:
-            empty_label = QLabel(t("device_strategy_hint", "尚未選擇任何設備。請先在「啟動」頁選擇設備。"))
+            empty_label = QLabel(t("device_strategy_empty", "尚未選擇任何設備。請先在「啟動」頁選擇設備。"))
             empty_label.setStyleSheet("color: #999;")
             self.device_energy_container_layout.addWidget(empty_label)
             return
@@ -761,7 +741,7 @@ class EmuMainWindow(QMainWindow):
         for device_serial in self.selected_devices:
             device_name = self.device_map.get(device_serial, {}).get('name', device_serial)
 
-            check = QCheckBox(f"{device_name} - {t('stop_waiting', '停止不補充')}")
+            check = QCheckBox(f"{device_name} - {t('stop_waiting', '活力不足時停止並等待')}")
             is_checked = self.current_config["device_strategies"].get(device_serial, False)
             check.setChecked(is_checked)
             check.stateChanged.connect(self.on_config_changed)
@@ -810,11 +790,17 @@ class EmuMainWindow(QMainWindow):
         self.help_text_widget.setText(f"""
 【{t("help_content", "EMU 模式使用說明")}】
 
+{t("version_label", "版本")}: v{APP_VERSION}
+
+{t("help_ldplayer_only", "★ 僅支援 LDPlayer（雷電模擬器）")}
+
 1. {t("app_launch", "啟動")}
    - {t("btn_refresh_device", "刷新設備")} → {t("select_all", "全選")} → {t("btn_start", "啟動")}
+    - {t("help_ldplayer_filter", "僅顯示 LDPlayer 設備，其他模擬器會自動過濾")}
 
 2. {t("app_setting", "設定")}
    - {t("help_config_desc", "可調整等待時間、閾值與活力策略")}
+    - {t("help_ldplayer_path_desc", "可設定 LDPlayer 安裝路徑（用於取得實例名稱）")}
 
 3. {t("help_shortcuts", "快捷鍵")}
    - {t("stop_command", "Ctrl+C - 停止程式")}
@@ -827,6 +813,11 @@ class EmuMainWindow(QMainWindow):
 【{t("help_tips", "小提示")}】
 - {t("help_tip1", "首次使用可先調整閾值與等待時間")}
 - {t("help_tip2", "若辨識失敗可調整閾值")}
+- {t("help_ldplayer_path_tip", "若 LDPlayer 安裝在非預設路徑，請在「設定」頁面指定安裝路徑")}
+
+【{t("help_usage_limits", "使用限制")}】
+- {t("help_limit_no_power_saving", "請勿開啟省電模式")}
+- {t("help_limit_lang_zh_tw", "遊戲語言必須使用繁體中文")}
         """)
 
     def refresh_devices(self):
@@ -938,7 +929,12 @@ class EmuMainWindow(QMainWindow):
         """啟動機器人"""
         self.is_running = True
         self.is_paused = False
-        self.is_debug = False
+        if AUTOPVE_AVAILABLE:
+            try:
+                autoPVE.set_paused(False)
+                autoPVE.set_debug_mode(self.is_debug)
+            except Exception:
+                pass
         self.start_btn.setText(t("btn_stop", "停止"))
         self.start_btn.setStyleSheet("background-color: #f44336; color: white; padding: 10px; font-weight: bold;")
         self.pause_btn.setEnabled(True)
@@ -973,6 +969,12 @@ class EmuMainWindow(QMainWindow):
     def stop_bot(self):
         """停止機器人"""
         self.is_running = False
+        self.is_paused = False
+        if AUTOPVE_AVAILABLE:
+            try:
+                autoPVE.set_paused(False)
+            except Exception:
+                pass
         if self.bot_thread:
             self.bot_thread.stop()
             self.bot_thread.wait()
@@ -1009,7 +1011,7 @@ class EmuMainWindow(QMainWindow):
             except Exception:
                 pass
         if self.is_paused:
-            self.pause_btn.setText(t("resumed", "繼續執行"))
+            self.pause_btn.setText(t("btn_resume", "繼續執行"))
             self.pause_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px; font-weight: bold;")
             self.status_label.setText(t("paused", "已暫停"))
             self.status_label.setStyleSheet("background-color: #FFD54F; color: black; padding: 8px; border-radius: 4px;")
@@ -1049,12 +1051,13 @@ class EmuMainWindow(QMainWindow):
             self.on_pause()
 
     def browse_emulator_path(self, emulator_key):
-        """瀏覽並選擇模擬器路徑"""
+        """瀏覽並選擇 LDPlayer 路徑"""
         from PyQt5.QtWidgets import QFileDialog
-        emulator_names = {'bluestacks': 'BlueStacks', 'ldplayer': 'LD Player', 'nox': 'Nox', 'mumu': 'MuMu'}
-        emulator_name = emulator_names.get(emulator_key, emulator_key)
-
-        directory = QFileDialog.getExistingDirectory(self, f"選擇 {emulator_name} 安裝路徑", "")
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            t("ldplayer_install_path", "LDPlayer 安裝路徑設定"),
+            ""
+        )
         if directory:
             self.emulator_path_inputs[emulator_key].setText(directory)
 

@@ -1,5 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
+chcp 65001 >nul
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 
 REM === 女王化身為無情的戰爭機器 小助手 - 啟動菜單 ===
 REM 檢查Python環境

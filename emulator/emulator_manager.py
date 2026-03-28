@@ -187,8 +187,8 @@ class EmulatorDeviceManager:
             # 1. 優先使用用戶配置的路徑
             bs_paths = []
             try:
-                if os.path.exists("bot_config.json"):
-                    with open("bot_config.json", 'r', encoding='utf-8') as f:
+                if os.path.exists("bot_config_emu.json"):
+                    with open("bot_config_emu.json", 'r', encoding='utf-8') as f:
                         bot_config = json.load(f)
                         emulator_paths = bot_config.get("emulator_paths", {})
                         if "bluestacks" in emulator_paths and emulator_paths["bluestacks"]:
@@ -421,8 +421,8 @@ class EmulatorDeviceManager:
             # 1. 優先使用用戶配置的路徑
             nox_adb = None
             try:
-                if os.path.exists("bot_config.json"):
-                    with open("bot_config.json", 'r', encoding='utf-8') as f:
+                if os.path.exists("bot_config_emu.json"):
+                    with open("bot_config_emu.json", 'r', encoding='utf-8') as f:
                         bot_config = json.load(f)
                         emulator_paths = bot_config.get("emulator_paths", {})
                         if "nox" in emulator_paths and emulator_paths["nox"]:
@@ -533,8 +533,8 @@ class EmulatorDeviceManager:
             # 1. 優先使用用戶配置的路徑
             mumu_console = None
             try:
-                if os.path.exists("bot_config.json"):
-                    with open("bot_config.json", 'r', encoding='utf-8') as f:
+                if os.path.exists("bot_config_emu.json"):
+                    with open("bot_config_emu.json", 'r', encoding='utf-8') as f:
                         bot_config = json.load(f)
                         emulator_paths = bot_config.get("emulator_paths", {})
                         if "mumu" in emulator_paths and emulator_paths["mumu"]:
@@ -644,11 +644,11 @@ class EmulatorDeviceManager:
 
     def _find_ldplayer_console(self) -> Optional[str]:
         """查找 LD Player 控制台"""
-        # 1. 優先使用用戶配置的路徑（來自 bot_config.json）
+        # 1. 優先使用用戶配置的路徑（來自 bot_config_emu.json）
         try:
             import os.path
-            if os.path.exists("bot_config.json"):
-                with open("bot_config.json", 'r', encoding='utf-8') as f:
+            if os.path.exists("bot_config_emu.json"):
+                with open("bot_config_emu.json", 'r', encoding='utf-8') as f:
                     bot_config = json.load(f)
                     emulator_paths = bot_config.get("emulator_paths", {})
                     if "ldplayer" in emulator_paths and emulator_paths["ldplayer"]:

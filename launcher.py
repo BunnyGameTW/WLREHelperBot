@@ -47,6 +47,21 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
+def get_app_version():
+    """讀取版本號（優先 VERSION 檔）"""
+    try:
+        with open(resource_path("VERSION"), "r", encoding="utf-8") as f:
+            version = f.read().strip()
+            if version:
+                return version
+    except Exception:
+        pass
+    return "0.1.0"
+
+
+APP_VERSION = get_app_version()
+
+
 class BotControlThread(QThread):
     """機器人控制線程 - PC 模式專用"""
     log_signal = pyqtSignal(str)
@@ -102,7 +117,7 @@ class PCMainWindow(QMainWindow):
         # 初始化多語言
         init_i18n("zh_TW")
 
-        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + " - PC v1.0")
+        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + f" - PC v{APP_VERSION}")
         self.setGeometry(100, 100, 1300, 800)
         self.apply_app_icon()
 
@@ -214,7 +229,7 @@ class PCMainWindow(QMainWindow):
 
     def update_ui_texts(self):
         """更新所有 UI 文字為當前語言"""
-        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + " - PC v1.0")
+        self.setWindowTitle(t("app_title", "女王化身為無情的戰爭機器 小助手") + f" - PC v{APP_VERSION}")
 
         # 標籤頁名稱
         self.tabs.setTabText(0, t("app_launch", "啟動"))
@@ -237,7 +252,7 @@ class PCMainWindow(QMainWindow):
         if not self.is_paused:
             self.pause_btn.setText(t("btn_pause", "暫停"))
         else:
-            self.pause_btn.setText(t("resumed", "繼續"))
+            self.pause_btn.setText(t("btn_resume", "繼續執行"))
 
         if not self.is_debug:
             self.debug_btn.setText(t("btn_debug", "除錯模式"))
@@ -278,6 +293,9 @@ class PCMainWindow(QMainWindow):
 
         self.save_btn.setText(t("config_change", "保存設定"))
         self.restore_btn.setText(t("btn_restore_defaults", "恢復預設"))
+
+        # 設定顯示
+        self.update_current_config_display()
 
         # 控制台
         self.log_group.setTitle(t("error", "輸出日誌"))
@@ -429,6 +447,20 @@ class PCMainWindow(QMainWindow):
 
         layout.addLayout(columns_layout)
 
+        # === 目前套用設定 ===
+        current_config_group = QGroupBox(t("config_info", "目前套用的設定"))
+        current_config_layout = QVBoxLayout()
+
+        self.current_config_text = QTextEdit()
+        self.current_config_text.setReadOnly(True)
+        self.current_config_text.setMinimumHeight(200)
+        self.current_config_text.setFont(QFont("Courier", 10))
+        self.update_current_config_display()
+        current_config_layout.addWidget(self.current_config_text)
+
+        current_config_group.setLayout(current_config_layout)
+        layout.addWidget(current_config_group)
+
         # === 保存按鈕 ===
         button_layout = QHBoxLayout()
 
@@ -484,12 +516,18 @@ class PCMainWindow(QMainWindow):
 
     def _update_help_text(self):
         """更新說明文字"""
+        help_steps = t(
+            "help_steps_desc",
+            "1. 選擇模式並刷新設備/視窗<br>2. 勾選要控制的設備或視窗<br>3. 調整等待時間、閾值與活力策略<br>4. 按下啟動，必要時可暫停或停止"
+        ).replace("<br>", "\n   ")
         self.help_text_widget.setText(f"""
 【{t("help_content", "PC 模式使用說明")}】
 
+{t("version_label", "版本")}: v{APP_VERSION}
+
 1. {t("app_launch", "啟動")}
    - {t("help_tip3", "PC 模式請保持視窗可見")}
-   - {t("help_steps_desc", "選擇視窗 → 調整設定 → 按下啟動")}
+   {help_steps}
 
 2. {t("app_setting", "設定")}
    - {t("help_config_desc", "可調整等待時間、閾值與活力策略")}
@@ -501,6 +539,10 @@ class PCMainWindow(QMainWindow):
 
 4. {t("help_principle_title", "運作原理")}
    {t("help_principle_desc", "透過畫面擷取與模板比對自動識別並點擊")}
+
+【{t("help_usage_limits", "使用限制")}】
+- {t("help_limit_no_power_saving", "請勿開啟省電模式")}
+- {t("help_limit_lang_zh_tw", "遊戲語言必須使用繁體中文")}
         """)
 
     def refresh_windows(self):
@@ -594,7 +636,12 @@ class PCMainWindow(QMainWindow):
         """啟動機器人"""
         self.is_running = True
         self.is_paused = False
-        self.is_debug = False
+        if AUTOPVE_AVAILABLE:
+            try:
+                autoPVE.set_paused(False)
+                autoPVE.set_debug_mode(self.is_debug)
+            except Exception:
+                pass
         self.start_btn.setText(t("btn_stop", "停止"))
         self.start_btn.setStyleSheet("background-color: #f44336; color: white; padding: 10px; font-weight: bold;")
         self.pause_btn.setEnabled(True)
@@ -617,6 +664,12 @@ class PCMainWindow(QMainWindow):
     def stop_bot(self):
         """停止機器人"""
         self.is_running = False
+        self.is_paused = False
+        if AUTOPVE_AVAILABLE:
+            try:
+                autoPVE.set_paused(False)
+            except Exception:
+                pass
         if self.bot_thread:
             self.bot_thread.stop()
             self.bot_thread.wait()
@@ -652,7 +705,7 @@ class PCMainWindow(QMainWindow):
             except Exception:
                 pass
         if self.is_paused:
-            self.pause_btn.setText(t("resumed", "繼續執行"))
+            self.pause_btn.setText(t("btn_resume", "繼續執行"))
             self.pause_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px; font-weight: bold;")
             self.status_label.setText(t("paused", "已暫停"))
             self.status_label.setStyleSheet("background-color: #FFD54F; color: black; padding: 8px; border-radius: 4px;")
@@ -701,15 +754,50 @@ class PCMainWindow(QMainWindow):
         self.save_btn.setEnabled(enabled and self.config_dirty)
         self.restore_btn.setEnabled(enabled)
 
+    def update_current_config_display(self):
+        """更新目前套用設定顯示"""
+        if not hasattr(self, 'current_config_text'):
+            return
+        threshold_display = {
+            "title": t("threshold_title", "標題"),
+            "btn_add": t("threshold_btn_add", "加號按鈕"),
+            "btn_confirm": t("threshold_btn_confirm", "確認按鈕"),
+            "btn_join": t("threshold_btn_join", "搜尋對手"),
+            "in_battle": t("threshold_in_battle", "戰鬥中"),
+            "energy_low": t("threshold_energy_low", "低活力"),
+            "energy_9": t("threshold_energy_9", "滿活力")
+        }
+        wait_display = {
+            "scan_interval": t("wait_scan_interval", "辨識間隔"),
+            "after_click": t("wait_after_click", "點擊等待"),
+            "pop_window": t("wait_pop_window", "視窗跳出"),
+            "battle_unlock": t("wait_battle_unlock", "戰鬥判斷"),
+            "join_confirm": t("wait_join_confirm", "加入確認"),
+            "wait_battle_check": t("wait_wait_battle_check", "戰鬥超時檢查")
+        }
+        config_text = f"【{t('config_info', '目前設定')}】\n\n"
+        config_text += f"{t('threshold_config', '辨識閾值')}:\n"
+        for key, display_name in threshold_display.items():
+            value = self.threshold_spinners[key].value() if key in self.threshold_spinners else 0.80
+            config_text += f"  • {display_name}: {value:.2f}\n"
+        config_text += f"\n{t('wait_time_config', '等待時間')} (s):\n"
+        for key, display_name in wait_display.items():
+            value = self.wait_spinners[key].value() if key in self.wait_spinners else 1.0
+            config_text += f"  • {display_name}: {value:.1f}\n"
+        energy_text = t("stop_waiting", "停止不補充") if self.energy_check.isChecked() else t("auto_supplement", "自動補充")
+        config_text += f"\n{t('energy_strategy_config', '活力策略')}: {energy_text}"
+        self.current_config_text.setText(config_text)
+
     def on_config_changed(self):
         """配置變更"""
         self.config_dirty = True
         self.save_btn.setEnabled(True)
+        self.update_current_config_display()
 
     def save_config(self):
-        """保存設定到 bot_config.json"""
+        """保存設定到 bot_config_pc.json"""
         try:
-            config_path = "bot_config.json"
+            config_path = "bot_config_pc.json"
             config_data = {}
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
@@ -727,6 +815,7 @@ class PCMainWindow(QMainWindow):
 
             self.config_dirty = False
             self.save_btn.setEnabled(False)
+            self.update_current_config_display()
             self.append_log("[CONFIG] " + t("config_saved", "設定已保存"))
         except Exception as e:
             self.append_log(f"[ERROR] 保存設定失敗: {e}")
@@ -745,6 +834,7 @@ class PCMainWindow(QMainWindow):
 
         self.config_dirty = False
         self.save_btn.setEnabled(False)
+        self.update_current_config_display()
         self.append_log("[CONFIG] " + t("btn_restore_defaults", "已恢復預設設定"))
 
     def _log_line_count(self):

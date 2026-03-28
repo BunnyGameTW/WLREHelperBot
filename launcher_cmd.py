@@ -18,6 +18,22 @@ except ImportError as e:
     AUTOPVE_AVAILABLE = False
 
 
+def get_app_version():
+    """?取版本號"""
+    try:
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "VERSION"), "r", encoding="utf-8") as f:
+            v = f.read().strip()
+            if v:
+                return v
+    except Exception:
+        pass
+    return "0.1.0"
+
+
+APP_VERSION = get_app_version()
+
+
 def print_header(title):
     """印標題"""
     print("\n" + "=" * 70)
@@ -27,13 +43,16 @@ def print_header(title):
 
 def print_menu():
     """印菜單"""
-    print("""
+    print(f"""
 【模式選擇】
 1. PC 模式      - 控制本地遊戲窗口（使用 pydirectinput）
 2. EMU 模式     - 控制多個模擬器設備（使用 ADB）
-3. 自動選擇     - 進入互動模式自行選擇
 Q. 退出
 
+【執行中快捷鍵】
+Ctrl+D  - 開啟/關閉除錯模式
+Ctrl+P  - 暂停/繼續偵測
+Ctrl+C  - 停止腳本
     """)
 
 
@@ -67,23 +86,9 @@ def emu_mode():
         print(f"[ERROR] EMU 模式執行失敗: {e}")
 
 
-def interactive_mode():
-    """互動模式 - 不預設模式，由 autoPVE 自行詢問"""
-    if not AUTOPVE_AVAILABLE:
-        print("[ERROR] autoPVE 核心模組不可用")
-        return
-
-    try:
-        autoPVE.main(from_gui=False)
-    except KeyboardInterrupt:
-        print("\n[INFO] 已停止")
-    except Exception as e:
-        print(f"[ERROR] 執行失敗: {e}")
-
-
 def main():
     """主菜單"""
-    print_header("女王化身為無情的戰爭機器 小助手 - CMD 模式")
+    print_header(f"女王化身為無情的戰爭機器 小助手 - CMD 模式  v{APP_VERSION}")
 
     if not AUTOPVE_AVAILABLE:
         print("[ERROR] autoPVE 核心模組無法載入，CMD 模式無法使用。")
@@ -95,7 +100,7 @@ def main():
         print_menu()
 
         try:
-            choice = input("[INPUT] 選擇 [1/2/3/Q]: ").strip().upper()
+            choice = input("[INPUT] 選擇 [1/2/Q]: ").strip().upper()
         except KeyboardInterrupt:
             print("\n[INFO] 已退出")
             sys.exit(0)
@@ -104,8 +109,6 @@ def main():
             pc_mode()
         elif choice == "2":
             emu_mode()
-        elif choice == "3":
-            interactive_mode()
         elif choice == "Q":
             print("[INFO] 已退出")
             sys.exit(0)

@@ -26,6 +26,8 @@ env/
 *.bak
 
 bot_config.json
+bot_config_pc.json
+bot_config_emu.json
 build/
 dist/
 output/
