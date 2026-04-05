@@ -8,8 +8,8 @@ import ctypes
 
 import cv2
 import numpy as np
-import win32gui
-import win32ui
+import win32gui  # type: ignore[reportMissingImports]
+import win32ui  # type: ignore[reportMissingImports]
 import pydirectinput
 
 from .constants import BASE_W, BASE_H
@@ -24,7 +24,7 @@ from .disconnect_handler import DisconnectHandler
 class DriftBot(threading.Thread):
     """自動對戰機器人執行緒"""
 
-    def __init__(self, mode, name, device=None, hwnd=None, device_config_strategy=None):
+    def __init__(self, mode, name, device=None, hwnd=None, device_config_strategy=None, device_auto_features=None):
         super().__init__()
         # mode: "1" = PC, "2" = EMU
         self.mode = mode
@@ -39,12 +39,16 @@ class DriftBot(threading.Thread):
         self.real_h = BASE_H
 
         platform = "PC" if mode == "1" else "EMU"
+        self.platform = platform
         self.thresholds = _config.RUNNING_CONFIG["thresholds"][platform]
+        self._device_config_strategy_override = device_config_strategy
         self.stop_on_low_energy = (
             device_config_strategy
             if device_config_strategy is not None
             else _config.RUNNING_CONFIG["energy_strategy"]
         )
+        self.device_auto_features = device_auto_features  # {"wander": bool, "ai": bool} or None
+        self.auto_battle_enabled = bool(_config.RUNNING_CONFIG.get("auto_battle_enabled", True))
         self.last_energy_state = None
 
         self.perf_monitor = PerformanceMonitor(name)
@@ -52,12 +56,82 @@ class DriftBot(threading.Thread):
         self.last_screenshot_time = 0
         self.screenshot_cache_timeout = 0.05
 
+        # 灰階影像快取：避免同一幀重複 cvtColor + equalizeHist
+        self._gray_cache_id = None
+        self._gray_cache_img = None
+
         # 斷線偵測處理器（預留接口）
         self.disconnect_handler = DisconnectHandler(bot=self)
+
+        # hwnd 變更回調（供 GUI 更新視窗資訊）
+        self.on_hwnd_changed = None
+
+    def refresh_runtime_config(self):
+        """同步執行中的可熱更新設定（暫停修改後可直接套用）。"""
+        try:
+            cfg = _config.RUNNING_CONFIG
+            self.thresholds = cfg.get("thresholds", {}).get(self.platform, self.thresholds)
+            if self.mode == "2" and self.device is not None:
+                serial = getattr(self.device, "serial", None)
+                per_device_strategy = cfg.get("device_configs", {}).get(serial)
+                if per_device_strategy is not None:
+                    self._device_config_strategy_override = bool(per_device_strategy)
+                    self.stop_on_low_energy = bool(per_device_strategy)
+                elif self._device_config_strategy_override is None:
+                    self.stop_on_low_energy = cfg.get("energy_strategy", self.stop_on_low_energy)
+
+                # 每台設備自動開啟功能可在執行中熱更新。
+                # DisconnectHandler 會優先讀取 bot.device_auto_features 作為覆寫來源，
+                # 若不在此同步，暫停期間儲存後恢復仍會沿用舊值直到重啟。
+                per_device_auto = cfg.get("device_auto_features", {}).get(serial)
+                if per_device_auto is not None:
+                    self.device_auto_features = {
+                        "wander": bool(per_device_auto.get("wander", True)),
+                        "ai": bool(per_device_auto.get("ai", True)),
+                    }
+                else:
+                    self.device_auto_features = None
+            elif self._device_config_strategy_override is None:
+                self.stop_on_low_energy = cfg.get("energy_strategy", self.stop_on_low_energy)
+            self.auto_battle_enabled = bool(cfg.get("auto_battle_enabled", self.auto_battle_enabled))
+            if self.disconnect_handler is not None:
+                self.disconnect_handler.refresh_config()
+        except Exception as e:
+            self.log(f"[WARN] 刷新執行中設定失敗: {e}")
+
+    def _clear_frame_cache(self):
+        """釋放影像快取，降低長時間運行後的記憶體占用。"""
+        self.last_screenshot = None
+        self._gray_cache_id = None
+        self._gray_cache_img = None
+
+    def _is_complete_png_bytes(self, data):
+        """快速檢查 PNG bytes 是否完整（至少包含合法 IEND chunk）。"""
+        if not data or len(data) < 8:
+            return False
+        if data[:8] != b"\x89PNG\r\n\x1a\n":
+            return False
+
+        offset = 8
+        size = len(data)
+        while offset + 8 <= size:
+            length = int.from_bytes(data[offset:offset + 4], "big", signed=False)
+            chunk_type = data[offset + 4:offset + 8]
+            offset += 8
+
+            if offset + length + 4 > size:
+                return False
+
+            offset += length + 4
+            if chunk_type == b"IEND":
+                return True
+
+        return False
 
     def stop(self):
         """停止線程"""
         self.running = False
+        self._clear_frame_cache()
 
     def log(self, msg):
         """統一的日誌方法"""
@@ -78,9 +152,21 @@ class DriftBot(threading.Thread):
         if self.mode == "2":  # EMU
             try:
                 image_bytes = self.device.screencap()
-                img = cv2.imdecode(
-                    np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR
-                )
+
+                # screencap 偶發回傳不完整 PNG，先檢查可避免 libpng 錯誤訊息。
+                if self._is_complete_png_bytes(image_bytes):
+                    img = cv2.imdecode(
+                        np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR
+                    )
+                else:
+                    # 立即重試一次，減少瞬間傳輸中斷造成的空幀。
+                    retry_bytes = self.device.screencap()
+                    if self._is_complete_png_bytes(retry_bytes):
+                        img = cv2.imdecode(
+                            np.frombuffer(retry_bytes, np.uint8), cv2.IMREAD_COLOR
+                        )
+                    else:
+                        img = None
             except Exception:
                 img = None
         else:  # PC
@@ -129,6 +215,22 @@ class DriftBot(threading.Thread):
             client_point = win32gui.ClientToScreen(self.hwnd, (0, 0))
             pydirectinput.click(client_point[0] + real_x, client_point[1] + real_y)
 
+    def execute_key(self, key_name, android_keycode=None):
+        """跨平台按鍵輸入。PC 使用 pydirectinput，EMU 使用 ADB keyevent。"""
+        if self.mode == "2":
+            if android_keycode is not None:
+                self.device.shell(f"input keyevent {int(android_keycode)}")
+                return
+            key_map = {
+                "esc": 111,
+                "r": 46,
+            }
+            if key_name.lower() in key_map:
+                self.device.shell(f"input keyevent {key_map[key_name.lower()]}")
+            return
+
+        pydirectinput.press(key_name)
+
     # ---- 模板匹配 ----
 
     def find_pos(self, screen, key, custom_threshold=None):
@@ -139,8 +241,15 @@ class DriftBot(threading.Thread):
         start_time = time.time()
         real_h, real_w = screen.shape[:2]
 
-        gray_screen = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
-        gray_screen = cv2.equalizeHist(gray_screen)
+        # 灰階影像快取：同一幀只做一次 cvtColor + equalizeHist
+        screen_id = id(screen)
+        if self._gray_cache_id == screen_id:
+            gray_screen = self._gray_cache_img
+        else:
+            gray_screen = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
+            gray_screen = cv2.equalizeHist(gray_screen)
+            self._gray_cache_id = screen_id
+            self._gray_cache_img = gray_screen
 
         scale_w = real_w / BASE_W
         template = LOADED_TEMPLATES[key]
@@ -149,7 +258,7 @@ class DriftBot(threading.Thread):
         best_loc = None
         best_tpl_h, best_tpl_w = 0, 0
 
-        scales = [scale_w * (1 + offset * 0.05) for offset in [-2, -1, 0, 1, 2]]
+        scales = [scale_w * (1 + offset * 0.05) for offset in [-1, 0, 1]]
 
         for scale in scales:
             if scale <= 0:
@@ -176,16 +285,29 @@ class DriftBot(threading.Thread):
         self.perf_monitor.log_template_match(elapsed)
 
         if _state.DEBUG_MODE and key != "in_battle":
-            match_state = "HIT" if best_val >= thresh else "MISS"
-            self.log(
-                f"[SEARCH] {key:12} | {match_state:4} | 分數: {best_val:.4f} | 門檻: {thresh:.2f} | 耗時: {elapsed*1000:.1f}ms"
-            )
+            _t_now = time.time()
+            _debug_times = getattr(self, '_debug_search_log_times', None)
+            if _debug_times is None:
+                self._debug_search_log_times = {}
+                _debug_times = self._debug_search_log_times
+            if _t_now - _debug_times.get(key, 0) >= 1.0:
+                match_state = "HIT" if best_val >= thresh else "MISS"
+                self.log(
+                    f"[SEARCH] {key:12} | {match_state:4} | 分數: {best_val:.4f} | 門檻: {thresh:.2f} | 耗時: {elapsed*1000:.1f}ms"
+                )
+                _debug_times[key] = _t_now
 
         if best_val >= thresh and best_loc is not None:
             return (best_loc[0] + best_tpl_w // 2, best_loc[1] + best_tpl_h // 2)
         return None
 
     # ---- 主循環 ----
+
+    def _interruptible_sleep(self, duration):
+        """可中斷的 sleep，每 0.1 秒檢查 self.running。"""
+        end = time.time() + duration
+        while self.running and time.time() < end:
+            time.sleep(min(0.1, end - time.time()))
 
     def run(self):
         self.log("[START] 開始執行循環...")
@@ -197,18 +319,34 @@ class DriftBot(threading.Thread):
                 # 檢查暫停狀態
                 with _state.LOCK:
                     if _state.PAUSED:
-                        time.sleep(0.5)
+                        self._interruptible_sleep(0.5)
+                        continue
+
+                # EMU 重連流程 A 的關閉/啟動/暖機步驟不依賴畫面；
+                # 先推進 recovery，可避免 screencap 卡住導致流程停滯。
+                if self.mode == "2" and self.disconnect_handler.should_skip_screen_capture():
+                    if self.running and self.disconnect_handler.check(None):
+                        self._interruptible_sleep(_config.RUNNING_CONFIG["wait_times"]["scan_interval"])
                         continue
 
                 # 獲取截圖
                 screen = self.get_screenshot(use_cache=False)
                 if screen is None or not isinstance(screen, np.ndarray):
-                    time.sleep(1)
+                    # EMU 在重連期間即使無畫面，也要讓斷線流程持續推進。
+                    if self.running and self.disconnect_handler.check(None):
+                        continue
+                    # PC 模式若視窗被關閉，讓斷線處理器仍可驅動重啟流程。
+                    if self.running and self.disconnect_handler.handle_missing_screen():
+                        continue
+                    self._interruptible_sleep(1)
                     continue
 
                 # 【預留】斷線偵測 hook
-                if self.disconnect_handler.check(screen):
+                if self.running and self.disconnect_handler.check(screen):
                     continue
+
+                if not self.running:
+                    break
 
                 # 偵測是否在戰鬥中
                 if self.find_pos(screen, "in_battle"):
@@ -216,7 +354,7 @@ class DriftBot(threading.Thread):
                         self.log("[BATTLE] 戰鬥開始，解除鎖定。")
                         self.waiting_for_battle = False
                         self.last_energy_state = None
-                    time.sleep(_config.RUNNING_CONFIG["wait_times"]["battle_unlock"])
+                    self._interruptible_sleep(_config.RUNNING_CONFIG["wait_times"]["battle_unlock"])
                     continue
 
                 # 30 秒檢查機制
@@ -240,13 +378,14 @@ class DriftBot(threading.Thread):
 
                         continue
                     else:
-                        time.sleep(_config.RUNNING_CONFIG["wait_times"]["scan_interval"])
+                        self._interruptible_sleep(_config.RUNNING_CONFIG["wait_times"]["scan_interval"])
                         continue
 
-                # 確認在準備介面
-                if self.find_pos(screen, "title"):
-                    self._handle_energy(screen)
-                    self._handle_match_search()
+                # 自動玩家對戰停用時，略過 battle_title 偵測
+                if self.auto_battle_enabled and self.find_pos(screen, "battle_title"):
+                    should_search = self._handle_energy(screen)
+                    if should_search:
+                        self._handle_match_search()
 
                 # 記錄幀耗時
                 frame_elapsed = time.time() - frame_start
@@ -260,15 +399,22 @@ class DriftBot(threading.Thread):
                             f"截圖: {stats['screenshot_ms']:.1f}ms | 匹配: {stats['template_ms']:.1f}ms"
                         )
 
-                time.sleep(_config.RUNNING_CONFIG["wait_times"]["scan_interval"])
+                self._interruptible_sleep(_config.RUNNING_CONFIG["wait_times"]["scan_interval"])
             except Exception as e:
                 self.log(f"[ERROR] {e}")
-                time.sleep(2)
+                self._interruptible_sleep(2)
+
+        self._clear_frame_cache()
 
     # ---- 子流程 ----
 
     def _handle_energy(self, screen):
-        """活力補充流程"""
+        """活力補充流程
+        
+        Returns:
+            True: 可繼續搜尋對手
+            False: 本輪不應搜尋（活力過低且需等待/補充中）
+        """
         if self.find_pos(screen, "energy_low", self.thresholds.get("energy_low")):
             if self.last_energy_state != "low":
                 self.last_energy_state = "low"
@@ -279,15 +425,17 @@ class DriftBot(threading.Thread):
 
             if self.stop_on_low_energy:
                 time.sleep(_config.RUNNING_CONFIG["wait_times"]["scan_interval"])
-                return
+                return False  # 停止搜尋
 
             safe_counter = 0
+            recovered = False
             while safe_counter < 9:
                 scr_energy = self.get_screenshot(use_cache=False)
                 if scr_energy is None:
                     break
 
                 if self.find_pos(scr_energy, "energy_9", self.thresholds.get("energy_9")):
+                    recovered = True
                     break
 
                 pos_add = self.find_pos(scr_energy, "btn_add")
@@ -308,12 +456,29 @@ class DriftBot(threading.Thread):
                 safe_counter += 1
                 time.sleep(0.3)
 
-            self.last_energy_state = "normal"
-            self.log("[OK] 活力已達標或結束回復流程。")
+            # 補充流程結束後再檢查一次，只有確認回到非低活力才允許繼續搜尋。
+            final_screen = self.get_screenshot(use_cache=False)
+            if final_screen is not None and not recovered:
+                if self.find_pos(final_screen, "energy_9", self.thresholds.get("energy_9")):
+                    recovered = True
+            still_low = False
+            if final_screen is not None:
+                still_low = bool(self.find_pos(final_screen, "energy_low", self.thresholds.get("energy_low")))
+
+            if recovered or not still_low:
+                self.last_energy_state = "normal"
+                self.log("[OK] 活力已達標，繼續搜尋。")
+                return True
+
+            self.last_energy_state = "low"
+            self.log("[ENERGY] 活力仍不足，暫不搜尋對手，下一輪繼續補充。")
+            return False
         else:
             if self.last_energy_state == "low":
                 self.last_energy_state = "normal"
                 self.log("[ENERGY] 活力已恢復！")
+        
+        return True  # 可继续搜尋
 
     def _handle_match_search(self):
         """搜尋對手流程"""

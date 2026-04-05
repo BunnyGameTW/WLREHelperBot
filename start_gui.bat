@@ -4,7 +4,7 @@ chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
-REM === 女王化身為無情的戰爭機器 小助手 - 啟動菜單 ===
+REM === 女王的飄流小助手 - 啟動選單 ===
 REM 檢查Python環境
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -25,12 +25,12 @@ if errorlevel 1 (
 
 echo [OK] Dependencies OK
 
-REM === 顯示選擇菜單 ===
+REM === 顯示選擇選單 ===
 :menu
 cls
 echo.
 echo ====================================
-echo  女王化身為無情的戰爭機器 小助手
+echo  女王的飄流小助手
 echo ====================================
 echo.
 echo [1] PC 模式 (單本地窗口, 實時控制)

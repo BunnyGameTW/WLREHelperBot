@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+import locale
 
 import win32gui
 from ppadb.client import Client as AdbClient
@@ -17,6 +18,28 @@ from .state import DEBUG_MODE, PAUSED, LOCK, PC_WINDOWS
 
 # ---- LDPlayer 控制台快取 ----
 LDPLAYER_CONSOLE_CACHE = {"path": None, "instances": None, "ts": 0.0}
+
+
+def _decode_console_output(raw):
+    """Decode console bytes robustly for Windows CJK locales."""
+    if isinstance(raw, str):
+        return raw
+    if raw is None:
+        return ""
+
+    preferred = locale.getpreferredencoding(False) or "utf-8"
+    # Priority: current system code page first, then common Windows CJK encodings.
+    encodings = [preferred, "cp950", "big5", "gbk", "utf-8"]
+    tried = set()
+    for enc in encodings:
+        if not enc or enc in tried:
+            continue
+        tried.add(enc)
+        try:
+            return raw.decode(enc)
+        except Exception:
+            continue
+    return raw.decode("utf-8", errors="replace")
 
 
 def find_ldplayer_console_path():
@@ -69,14 +92,12 @@ def get_ldplayer_custom_names(console_path):
     # 先嘗試 list2（ldconsole 支援），若失敗再嘗試目錄下的另一個 exe
     for exe_path in [console_path]:
         try:
-            result = subprocess.check_output(
-                [exe_path, "list2"], encoding="gbk", errors="ignore",
-                timeout=5
-            )
+            result_bytes = subprocess.check_output([exe_path, "list2"], timeout=5)
+            result = _decode_console_output(result_bytes)
             if not result or not result.strip():
                 continue
             instances = []
-            for line in result.strip().split("\n"):
+            for line in result.strip().splitlines():
                 if not line:
                     continue
                 data = line.split(",")
@@ -94,13 +115,11 @@ def get_ldplayer_custom_names(console_path):
     alt_path = os.path.join(parent, alt_name)
     if os.path.exists(alt_path):
         try:
-            result = subprocess.check_output(
-                [alt_path, "list2"], encoding="gbk", errors="ignore",
-                timeout=5
-            )
+            result_bytes = subprocess.check_output([alt_path, "list2"], timeout=5)
+            result = _decode_console_output(result_bytes)
             if result and result.strip():
                 instances = []
-                for line in result.strip().split("\n"):
+                for line in result.strip().splitlines():
                     if not line:
                         continue
                     data = line.split(",")
@@ -242,16 +261,20 @@ def find_pc_game_windows():
 
 # ---- ADB 連線 ----
 
-def connect_adb():
-    """連接 ADB 並獲取所有設備"""
+def connect_adb(quiet=False):
+    """連接 ADB 並獲取所有設備。
+
+    quiet=True 時，遇到無設備不輸出錯誤日誌（供 GUI 掃描使用）。
+    """
     try:
         client = AdbClient(host="127.0.0.1", port=5037)
         devices = client.devices()
         if not devices:
-            bot_log(
-                "ERROR",
-                "找不到任何模擬器，請確認 ADB 是否啟動或模擬器『USB偵錯』已開。",
-            )
+            if not quiet:
+                bot_log(
+                    "ERROR",
+                    "找不到任何模擬器，請確認 ADB 是否啟動或模擬器『USB偵錯』已開。",
+                )
             return []
         return devices
     except Exception as e:
@@ -271,6 +294,8 @@ def input_listener():
     try:
         import msvcrt
         import _thread
+        last_pause_toggle = 0.0
+        pause_toggle_cooldown = 0.25
         while _logger.CMD_INPUT_ENABLED:
             try:
                 if not msvcrt.kbhit():
@@ -285,6 +310,10 @@ def input_listener():
                     state_str = "開啟" if _state.DEBUG_MODE else "關閉"
                     bot_log("DBG", f"除錯模式 {state_str}")
                 elif ch == b'\x10':  # Ctrl+P - 暫停/繼續
+                    now = time.time()
+                    if now - last_pause_toggle < pause_toggle_cooldown:
+                        continue
+                    last_pause_toggle = now
                     with _state.LOCK:
                         _state.PAUSED = not _state.PAUSED
                     state_str = "已暫停" if _state.PAUSED else "已繼續"

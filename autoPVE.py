@@ -102,7 +102,7 @@ def main(from_gui=False, log_queue=None, config_override=None, mode_override=Non
     if not from_gui:
         # ===== 命令行交互模式 =====
         print("=" * 50)
-        print("  女王化身為無情的戰爭機器 小助手")
+        print("  女王的飄流小助手")
         from core.constants import resource_path as _rp
         try:
             with open(_rp("VERSION"), "r", encoding="utf-8") as _vf:
@@ -187,11 +187,13 @@ def main(from_gui=False, log_queue=None, config_override=None, mode_override=Non
             device_strategy = _config.RUNNING_CONFIG["device_configs"].get(
                 d.serial, _config.RUNNING_CONFIG["energy_strategy"]
             )
+            device_auto_features = _config.RUNNING_CONFIG.get("device_auto_features", {}).get(d.serial)
             bot = DriftBot(
                 mode="2",
                 name=f"Emu-{d.serial}",
                 device=d,
                 device_config_strategy=device_strategy,
+                device_auto_features=device_auto_features,
             )
             bots.append(bot)
 
@@ -248,7 +250,6 @@ def main(from_gui=False, log_queue=None, config_override=None, mode_override=Non
         import win32gui
 
         for hwnd in target_hwnds:
-            win32gui.MoveWindow(hwnd, 100, 100, BASE_W, BASE_H, True)
             device_id = f"PC-{hwnd}"
             device_strategy = _config.RUNNING_CONFIG["device_configs"].get(
                 device_id, _config.RUNNING_CONFIG["energy_strategy"]
@@ -270,7 +271,7 @@ def main(from_gui=False, log_queue=None, config_override=None, mode_override=Non
         print("\n" + "=" * 50)
         print(f"啟動共 {len(bots)} 個獨立控制執行緒...")
         print("=" * 50)
-        print("\n[TIP] 執行中可使用 Ctrl+D / Ctrl+P 控制\n")
+        print("\n[TIP] 執行中可使用 Ctrl+C / Ctrl+P 控制\n")
 
         set_cmd_input_enabled(True)
         listener_thread = threading.Thread(target=input_listener, daemon=True)

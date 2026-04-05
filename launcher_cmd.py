@@ -6,6 +6,7 @@ CMD 模式 - 命令行版本
 
 import sys
 import os
+import signal
 
 # 確保能找到 autoPVE 模組
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -32,6 +33,12 @@ def get_app_version():
 
 
 APP_VERSION = get_app_version()
+
+
+def _handle_sigint(_signum, _frame):
+    """將 Ctrl+C 轉為乾淨退出，避免關閉階段噴 threading KeyboardInterrupt。"""
+    print("\n[INFO] 已退出")
+    raise SystemExit(0)
 
 
 def print_header(title):
@@ -88,12 +95,16 @@ def emu_mode():
 
 def main():
     """主菜單"""
-    print_header(f"女王化身為無情的戰爭機器 小助手 - CMD 模式  v{APP_VERSION}")
+    signal.signal(signal.SIGINT, _handle_sigint)
+    print_header(f"女王的飄流小助手 - CMD 模式  v{APP_VERSION}")
 
     if not AUTOPVE_AVAILABLE:
         print("[ERROR] autoPVE 核心模組無法載入，CMD 模式無法使用。")
         print("[INFO] 請確認 autoPVE.py 是否存在且所有依賴已安裝。")
-        input("\n按 Enter 退出...")
+        try:
+            input("\n按 Enter 退出...")
+        except (KeyboardInterrupt, EOFError):
+            pass
         sys.exit(1)
 
     while True:
@@ -103,6 +114,9 @@ def main():
             choice = input("[INPUT] 選擇 [1/2/Q]: ").strip().upper()
         except KeyboardInterrupt:
             print("\n[INFO] 已退出")
+            sys.exit(0)
+        except EOFError:
+            print("\n[INFO] 未偵測到可用輸入（EOF），已退出")
             sys.exit(0)
 
         if choice == "1":
@@ -117,4 +131,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # 最後保險：避免在 Python 關閉階段顯示 threading KeyboardInterrupt traceback。
+        print("\n[INFO] 已退出")
+        raise SystemExit(0)

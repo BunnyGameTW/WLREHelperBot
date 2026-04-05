@@ -25,6 +25,14 @@ env/
 *.tmp
 *.bak
 
+# Debug snapshots/images
+debug/**/*.png
+debug/**/*.jpg
+debug/**/*.jpeg
+debug/**/*.bmp
+debug/**/*.gif
+debug/**/*.webp
+
 bot_config.json
 bot_config_pc.json
 bot_config_emu.json

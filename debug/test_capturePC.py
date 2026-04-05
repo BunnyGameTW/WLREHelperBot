@@ -55,11 +55,9 @@ def capture_pc_window(window_title):
         cv2.imwrite(file_name, img)
         print(f"💾 PC版截圖成功！已儲存為 '{file_name}'")
         
-        # 顯示预览
-        cv2.imshow("PC Window Capture Test", img)
-        print("💡 按下任意鍵可關閉預覽視窗。")
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # 用系統預設圖片檢視器開啟
+        import os
+        os.startfile(os.path.abspath(file_name))
     else:
         print("❌ 截圖失敗，無法獲取視窗像素。")
 

@@ -13,15 +13,40 @@ WINDOW_TITLE = "飄流幻境Re:星之方舟"
 # 預設比對門檻
 THRESHOLD = 0.80
 
+# 重連流程固定選服點擊座標
+RECONNECT_SERVER_CLICK_POINT = (500, 50)
+
 # 模板檔案對應
 TEMPLATES_PATHS = {
-    "title": "ref_main_title.png",
+    "battle_title": "battle_title.png",
     "btn_add": "btn_add.png",
     "btn_confirm": "btn_confirm.png",
     "btn_join": "btn_join.png",
-    "in_battle": "ref_in_battle.png",
-    "energy_low": "ref_energy_low.png",
-    "energy_9": "ref_energy_9.png",
+    "in_battle": "in_battle.png",
+    "energy_low": "energy_low.png",
+    "energy_9": "energy_9.png",
+    "disconnect_hint": "disconnect_hint.png",
+    "btn_reconnect": "btn_reconnect.png",
+    "btn_back_to_login": "btn_back_to_login.png",
+    "check_exit": "check_exit.png",
+    "multi_login": "multi_login.png",
+    "custom_login": "custom_login.png",
+    "btn_login_account": "btn_login_account.png",
+    "select_server": "select_server.png",
+    "select_character": "select_character.png",
+    "login_game_button": "login_game_button.png",
+    "pop_gift_box": "pop_gift_box.png",
+    "start_game_announcement": "start_game_announcement.png",
+    "announcement": "announcement.png",
+    "dont_ask_today": "dont_ask_today.png",
+    "btn_cross": "btn_cross.png",
+    "btn_power_saving": "btn_power_saving.png",
+    "btn_wander_on": "btn_wander_on.png",
+    "btn_wander_off": "btn_wander_off.png",
+    "btn_ai": "btn_ai.png",
+    "btn_ai_off_in_battle": "btn_ai_off_in_battle.png",
+        "update_resource": "update_resource.png",
+    "login_from_other_place": "login_from_other_place.png",
 }
 
 # 平台專用配置檔名
