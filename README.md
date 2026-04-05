@@ -1,9 +1,9 @@
-﻿# WLREPVEBot
+﻿# WLREHelperBot
 
 這是一個用於自動化 PVE 操作的 Windows 專案，提供 PC GUI、EMU GUI 與 CMD 三種啟動方式。
 
 ## 版本資訊
-- 目前版本：`0.2.0`
+- 目前版本：`0.2.21`
 
 ## 功能重點
 - PC GUI、EMU GUI、CMD 三種模式分離運作，PC/EMU 各自保存設定與啟動參數。
@@ -38,17 +38,17 @@ python autoPVE.py
 
 ### PC 版本
 ```bat
-pyinstaller --clean --noconfirm --distpath output --workpath build/pc_build WLREPVEBot_PC.spec
+pyinstaller --clean --noconfirm --distpath output --workpath build/pc_build WLREHelperBot_PC.spec
 ```
 
-輸出：`output/WLREPVEBot_PC.exe`
+輸出：`output/WLREHelperBot_PC.exe`
 
 ### EMU 版本
 ```bat
-pyinstaller --clean --noconfirm --distpath output --workpath build/emu_build WLREPVEBot_EMU.spec
+pyinstaller --clean --noconfirm --distpath output --workpath build/emu_build WLREHelperBot_EMU.spec
 ```
 
-輸出：`output/WLREPVEBot_EMU.exe`
+輸出：`output/WLREHelperBot_EMU.exe`
 
 ## 設定檔
 - `default_config_pc.json`：PC 預設設定

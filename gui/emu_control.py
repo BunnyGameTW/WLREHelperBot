@@ -564,7 +564,7 @@ class EmuControlMixin:
     def closeEvent(self, event):
         """關閉事件"""
         from PyQt5.QtCore import QSettings
-        QSettings("WLREPVEBot", "EMUWindow").setValue("geometry", self.saveGeometry())
+        QSettings("WLREHelperBot", "EMUWindow").setValue("geometry", self.saveGeometry())
         if self.bot_thread:
             self.bot_thread.stop()
             self.bot_thread.wait()

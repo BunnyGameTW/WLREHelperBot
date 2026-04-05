@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.21 - 2026-04-05
+- 專案命名由 `WLREPVEBot` 調整為 `WLREHelperBot`，同步更新 README 標題與版本資訊。
+- 更新 Git 遠端 `origin` URL 為 `https://github.com/BunnyGameTW/WLREHelperBot.git`。
+- 打包名稱前綴同步改名：`WLREHelperBot_PC`、`WLREHelperBot_EMU`，並更新對應 PyInstaller spec 檔名與 `name` 參數。
+- 視窗位置儲存的 QSettings 應用識別字由 `WLREPVEBot` 改為 `WLREHelperBot`（PC/EMU）。
+
 ## 0.2.0 - 2026-04-05
 - 以 v0.1.6 為基準整合 PC / EMU / CMD：設定頁重構為獨立分頁，PC/EMU 啟動頁加入分頁級 `儲存設定 / 重置變更 / 恢復預設`，並補上未儲存設定防呆與欄位級差異提示。
 - 重構斷線重連與自動開啟流程：新增共用輔助模組、補上 `DisconnectHandler.refresh_config()`、修正登入後公告與彈窗處理、遊戲開啟檢查、低活力補充、AI/徘徊維護與多處時序問題。

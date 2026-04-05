@@ -509,7 +509,7 @@ class PCControlMixin:
 
     def closeEvent(self, event):
         from PyQt5.QtCore import QSettings
-        QSettings("WLREPVEBot", "PCWindow").setValue("geometry", self.saveGeometry())
+        QSettings("WLREHelperBot", "PCWindow").setValue("geometry", self.saveGeometry())
         if self.bot_thread:
             self.bot_thread.stop()
             self.bot_thread.wait()

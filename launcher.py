@@ -35,7 +35,7 @@ class PCMainWindow(PCUIMixin, PCConfigMixin, PCDisplayMixin, PCControlMixin, PCL
         super().__init__()
         init_i18n("zh_TW")
         self.setWindowTitle(t("app_title", "女王的飄流小助手") + f" - PC v{APP_VERSION}")
-        _s = QSettings("WLREPVEBot", "PCWindow")
+        _s = QSettings("WLREHelperBot", "PCWindow")
         _geo = _s.value("geometry")
         if _geo:
             self.restoreGeometry(_geo)

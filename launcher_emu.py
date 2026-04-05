@@ -35,7 +35,7 @@ class EmuMainWindow(EmuUIMixin, EmuConfigMixin, EmuDisplayMixin, EmuControlMixin
         super().__init__()
         init_i18n("zh_TW")
         self.setWindowTitle(t("app_title", "女王的飄流小助手") + f" - EMU v{APP_VERSION}")
-        _s = QSettings("WLREPVEBot", "EMUWindow")
+        _s = QSettings("WLREHelperBot", "EMUWindow")
         _geo = _s.value("geometry")
         if _geo:
             self.restoreGeometry(_geo)
