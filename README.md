@@ -34,6 +34,8 @@ python autoPVE.py
 
 ## 打包
 
+- 目前打包已停用 `UPX`，並使用合法 `app.ico` 資源，避免 Windows 載入錯誤與圖示遺失。
+
 ### PC 版本
 ```bat
 pyinstaller --clean --noconfirm --distpath output --workpath build/pc_build WLREPVEBot_PC.spec
