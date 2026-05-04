@@ -93,6 +93,12 @@ class PCControlMixin:
         self.screen_hash_interval_spin.setEnabled(enabled)
         self.action_cooldown_spin.setEnabled(enabled)
         self.check_game_open_interval_spin.setEnabled(enabled and not self.is_running)
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.scheduled_restart_global_enable_check.setEnabled(enabled)
+        if hasattr(self, "scheduled_restart_hours_spin"):
+            self.scheduled_restart_hours_spin.setEnabled(enabled)
+        if hasattr(self, "scheduled_restart_minutes_spin"):
+            self.scheduled_restart_minutes_spin.setEnabled(enabled)
         self.login_timeout_spin.setEnabled(enabled)
         self.post_login_timeout_spin.setEnabled(enabled)
         self.restart_game_enable_check.setEnabled(enabled)
@@ -203,19 +209,14 @@ class PCControlMixin:
             from PyQt5.QtCore import Qt
             item.setCheckState(Qt.Checked)
             self.on_window_selection_changed(item)
+        elif hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
 
         self._update_run_action_guard()
 
     def on_window_selection_changed(self, item):
-        """PC 單選：勾選一個時自動取消其他"""
+        """PC 多選：可同時選擇多個遊戲視窗。"""
         from PyQt5.QtCore import Qt
-        if item.checkState() == Qt.Checked:
-            self.window_list.blockSignals(True)
-            for i in range(self.window_list.count()):
-                other = self.window_list.item(i)
-                if other is not item:
-                    other.setCheckState(Qt.Unchecked)
-            self.window_list.blockSignals(False)
 
         self.selected_windows = []
         for i in range(self.window_list.count()):
@@ -226,12 +227,14 @@ class PCControlMixin:
                     self.selected_windows.append(hwnd)
 
         self.start_btn.setEnabled(len(self.selected_windows) > 0 and not self.is_running)
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
         self._update_run_action_guard()
 
     # ── 設定建構 ───────────────────────────────────────────────
     def _build_config(self):
         unlimited = self.max_reconnect_unlimited_check.isChecked()
-        return {
+        config = {
             "wait_times": {k: s.value() for k, s in self.wait_spinners.items()},
             "energy_strategy": self.energy_check.isChecked(),
             "auto_battle_enabled": self.auto_battle_enable_check.isChecked(),
@@ -261,8 +264,33 @@ class PCControlMixin:
                 "login_timeout": self.login_timeout_spin.value(),
                 "post_login_timeout": self.post_login_timeout_spin.value(),
                 "in_game_confirm_timeout": self.in_game_confirm_timeout_spin.value(),
+                "scheduled_restart_enabled": self.scheduled_restart_global_enable_check.isChecked()
+                if hasattr(self, "scheduled_restart_global_enable_check") else False,
+                "scheduled_restart_hours": int(self.scheduled_restart_hours_spin.value())
+                if hasattr(self, "scheduled_restart_hours_spin") else 0,
+                "scheduled_restart_minutes": int(self.scheduled_restart_minutes_spin.value())
+                if hasattr(self, "scheduled_restart_minutes_spin") else 0,
             },
         }
+
+        if hasattr(self, "device_feature_profile_checks"):
+            profile_map = {}
+            for device_id, widgets in self.device_feature_profile_checks.items():
+                profile_map[device_id] = {
+                    "auto_battle_enabled": widgets["auto_battle_enabled"].isChecked(),
+                    "stop_on_low_energy": widgets["stop_on_low_energy"].isChecked(),
+                    "disconnect_enabled": widgets["disconnect_enabled"].isChecked(),
+                    "auto_enable_features_enabled": widgets["auto_enable_features_enabled"].isChecked(),
+                    "scheduled_restart_enabled": widgets["scheduled_restart_enabled"].isChecked(),
+                }
+            config["device_feature_profiles"] = profile_map
+            # 向後相容：沿用既有欄位作為每設備活力策略。
+            config["device_configs"] = {
+                device_id: values["stop_on_low_energy"]
+                for device_id, values in profile_map.items()
+            }
+
+        return config
 
     # ── 啟動/停止 ──────────────────────────────────────────────
     def on_start_stop(self):
@@ -444,6 +472,10 @@ class PCControlMixin:
                 rc["energy_strategy"] = cfg["energy_strategy"]
             if "auto_battle_enabled" in cfg:
                 rc["auto_battle_enabled"] = cfg["auto_battle_enabled"]
+            if "device_configs" in cfg:
+                rc["device_configs"] = dict(cfg["device_configs"])
+            if "device_feature_profiles" in cfg:
+                rc["device_feature_profiles"] = dict(cfg["device_feature_profiles"])
             if "thresholds" in cfg:
                 for platform, values in cfg["thresholds"].items():
                     rc.setdefault("thresholds", {}).setdefault(platform, {}).update(values)
@@ -484,6 +516,12 @@ class PCControlMixin:
         self.screen_hash_interval_spin.setEnabled(enabled)
         self.action_cooldown_spin.setEnabled(enabled)
         self.check_game_open_interval_spin.setEnabled(enabled and not self.is_running)
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.scheduled_restart_global_enable_check.setEnabled(enabled)
+        if hasattr(self, "scheduled_restart_hours_spin"):
+            self.scheduled_restart_hours_spin.setEnabled(enabled)
+        if hasattr(self, "scheduled_restart_minutes_spin"):
+            self.scheduled_restart_minutes_spin.setEnabled(enabled)
         self.auto_feature_action_cooldown_spin.setEnabled(enabled)
         self.login_timeout_spin.setEnabled(enabled)
         self.post_login_timeout_spin.setEnabled(enabled)
@@ -492,6 +530,12 @@ class PCControlMixin:
         for key, spinner in self.disconnect_threshold_spinners.items():
             if key not in self.auto_feature_threshold_keys:
                 spinner.setEnabled(enabled)
+        if hasattr(self, "device_feature_profile_checks"):
+            for widgets in self.device_feature_profile_checks.values():
+                for cb in widgets.values():
+                    cb.setEnabled(enabled)
+        if hasattr(self, "batch_apply_btn"):
+            self.batch_apply_btn.setEnabled(enabled)
         self.auto_enable_features_check.setEnabled(enabled)
         self._update_auto_features_tab_enabled(editing_enabled=enabled)
         if hasattr(self, "save_btn"):

@@ -129,6 +129,10 @@ class DisconnectHandler:
         self.check_game_open_interval_emu = 60.0
         self._last_game_open_check_pc = time.time()
         self._last_game_open_check_emu = time.time()
+        self.scheduled_restart_enabled = False
+        self.scheduled_restart_hours = 0
+        self.scheduled_restart_minutes = 0
+        self._last_scheduled_restart_ts = time.time()
 
         self._refresh_config()
 
@@ -156,11 +160,25 @@ class DisconnectHandler:
         self.auto_enable_ai = bool(cfg.get("auto_enable_ai", True))
         self.check_game_open_interval_pc = float(cfg.get("check_game_open_interval_pc", 60.0))
         self.check_game_open_interval_emu = float(cfg.get("check_game_open_interval_emu", 60.0))
+        self.scheduled_restart_enabled = bool(cfg.get("scheduled_restart_enabled", False))
+        self.scheduled_restart_hours = int(cfg.get("scheduled_restart_hours", 0))
+        self.scheduled_restart_minutes = int(cfg.get("scheduled_restart_minutes", 0))
+        self.scheduled_restart_hours = max(0, min(23, self.scheduled_restart_hours))
+        self.scheduled_restart_minutes = max(0, min(59, self.scheduled_restart_minutes))
         # 每台設備個別設定覆寫全域設定
         daf = getattr(self.bot, "device_auto_features", None)
         if daf is not None:
             self.auto_enable_wander = bool(daf.get("wander", self.auto_enable_wander))
             self.auto_enable_ai = bool(daf.get("ai", self.auto_enable_ai))
+        feature_overrides = getattr(self.bot, "device_feature_overrides", None)
+        if feature_overrides:
+            self.enabled = bool(feature_overrides.get("disconnect_enabled", self.enabled))
+            self.auto_enable_features_enabled = bool(
+                feature_overrides.get("auto_enable_features_enabled", self.auto_enable_features_enabled)
+            )
+            self.scheduled_restart_enabled = bool(
+                feature_overrides.get("scheduled_restart_enabled", self.scheduled_restart_enabled)
+            )
         # 選服座標固定為常數設定，不接受設定檔覆蓋。
         self.server_click_point = [RECONNECT_SERVER_CLICK_POINT[0], RECONNECT_SERVER_CLICK_POINT[1]]
         self.pc_exe_path = str(cfg.get("pc_exe_path", "") or "")
@@ -238,6 +256,8 @@ class DisconnectHandler:
             return self._run_recovery(screen)
 
         # 全狀態定時檢查：不限制必須先進入遊戲。
+        if self._run_scheduled_restart_check(screen):
+            return True
         if self._run_periodic_game_open_check(screen):
             return True
 
@@ -2070,9 +2090,12 @@ class DisconnectHandler:
         self.current_step = step
         self.flow_start_time = time.time()
         if flow == "A" and step == "close_game":
+            self._reset_scheduled_restart_timer("flow_a_close_game")
             self._emu_close_attempts = 0
             self._emu_close_started_at = self.flow_start_time
             self._emu_not_foreground_since = 0.0
+        if flow == "A" and step == "launch_game":
+            self._reset_scheduled_restart_timer("flow_a_launch_game")
         if flow == "C":
             self._flow_c_ai_off_seen_frames = 0
             self._flow_c_ai_last_click_at = 0.0
@@ -2104,6 +2127,45 @@ class DisconnectHandler:
             return self._run_recovery(screen if isinstance(screen, np.ndarray) else None)
         self._log_throttled("game_open_check_alive", "[DISCONNECT] 定時檢查結果：遊戲仍開啟。", 10.0)
         return False
+
+    def _scheduled_restart_interval_seconds(self):
+        total_minutes = (int(self.scheduled_restart_hours) * 60) + int(self.scheduled_restart_minutes)
+        return max(60.0, float(total_minutes) * 60.0)
+
+    def _reset_scheduled_restart_timer(self, reason=""):
+        self._last_scheduled_restart_ts = time.time()
+        if reason:
+            self._log_throttled(
+                "scheduled_restart_timer_reset",
+                f"[DISCONNECT] 定時重開計時器已重置（{reason}）。",
+                5.0,
+            )
+
+    def _run_scheduled_restart_check(self, screen):
+        if self.bot is None or self.recovery_active or not self.enabled:
+            return False
+        if not self.restart_game_enabled or not self.scheduled_restart_enabled:
+            return False
+
+        interval = self._scheduled_restart_interval_seconds()
+        now = time.time()
+        elapsed = now - float(self._last_scheduled_restart_ts)
+        if elapsed < interval:
+            remaining = max(0.0, interval - elapsed)
+            self._log_throttled(
+                "scheduled_restart_wait",
+                (
+                    "[DISCONNECT] 定時重開等待中："
+                    f"剩餘 {remaining:.0f}s（每 {interval / 60.0:.0f} 分鐘重開一次）。"
+                ),
+                30.0,
+            )
+            return False
+
+        self.bot.log("[DISCONNECT] 定時重開時間到，進入流程 A 直接重開遊戲。")
+        self._enter_recovery("scheduled_restart")
+        self._transition("A", "close_game")
+        return self._run_recovery(screen if isinstance(screen, np.ndarray) else None)
 
     def _should_check_game_open(self):
         if self.bot is None:
@@ -2182,6 +2244,7 @@ class DisconnectHandler:
         except Exception:
             return
         self.bot.name = f"PC-{hwnd_int}"
+        self.bot.device_id = f"PC-{hwnd_int}"
 
     def _is_pc_exe_running(self):
         if self.bot is None or str(getattr(self.bot, "mode", "")) != "1":

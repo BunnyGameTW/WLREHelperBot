@@ -67,6 +67,7 @@ class EmuMainWindow(EmuUIMixin, EmuConfigMixin, EmuDisplayMixin, EmuControlMixin
             "auto_battle_enabled": True,
             "device_strategies": {},
             "device_auto_features": {},
+            "device_feature_profiles": {},
             "thresholds_emu": {
                 "battle_title": 0.70, "btn_add": 0.70, "btn_confirm": 0.70,
                 "btn_join": 0.70, "in_battle": 0.70, "energy_low": 0.74, "energy_9": 0.95,
@@ -89,6 +90,9 @@ class EmuMainWindow(EmuUIMixin, EmuConfigMixin, EmuDisplayMixin, EmuControlMixin
                 "auto_feature_action_cooldown": 1.0,
                 "in_game_confirm_timeout": 25.0,
                 "check_game_open_interval_emu": 60.0,
+                "scheduled_restart_enabled": False,
+                "scheduled_restart_hours": 0,
+                "scheduled_restart_minutes": 0,
                 "pc_launch_wait_timeout": 25.0,
                 "screen_hash_diff_threshold": 5.0,
                 "screen_hash_interval": 1.0,

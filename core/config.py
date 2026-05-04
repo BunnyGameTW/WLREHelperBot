@@ -59,6 +59,7 @@ def _hardcoded_defaults():
             },
         },
         "device_configs": {},
+        "device_feature_profiles": {},
         "disconnect": {
             "enabled": True,
             "same_screen_timeout": 45.0,
@@ -76,10 +77,13 @@ def _hardcoded_defaults():
             "auto_enable_features_enabled": True,
             "auto_enable_wander": True,
             "auto_enable_ai": True,
+            "scheduled_restart_enabled": False,
+            "scheduled_restart_hours": 0,
+            "scheduled_restart_minutes": 0,
             "pc_exe_path": "",
             "emu_package_name": "",
-                    "check_game_open_interval_pc": 60.0,
-                    "check_game_open_interval_emu": 60.0,
+            "check_game_open_interval_pc": 60.0,
+            "check_game_open_interval_emu": 60.0,
         },
     }
 
@@ -168,6 +172,9 @@ def _print_saved_config_summary(saved_config, default_config, platform):
         ("auto_enable_features_enabled", "流程C 自動開啟功能"),
         ("auto_enable_wander", "自動開啟徘徊"),
         ("auto_enable_ai", "自動開啟 AI"),
+        ("scheduled_restart_enabled", "定時重開啟用"),
+        ("scheduled_restart_hours", "定時重開時數"),
+        ("scheduled_restart_minutes", "定時重開分鐘"),
     ]
     if platform == "PC":
         disconnect_fields.extend([

@@ -185,6 +185,8 @@ class EmuUIMixin:
         self.auto_enable_features_check.setText(t("reconnect_auto_features_enable", "啟用自動開啟功能"))
         self.auto_enable_wander_check.setText(t("reconnect_auto_wander_enable", "自動開啟徘徊"))
         self.auto_enable_ai_check.setText(t("reconnect_auto_ai_enable", "自動開啟 AI"))
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.scheduled_restart_global_enable_check.setText(t("scheduled_restart_enable", "啟用定時重開"))
 
         disconnect_threshold_i18n_keys = {
             "disconnect_hint": "threshold_disconnect_hint",
@@ -252,6 +254,17 @@ class EmuUIMixin:
         )
         self.device_auto_feature_group.setTitle(t("device_auto_feature_config", "每台設備自動開啟功能"))
         self.device_auto_feature_info.setText(t("device_auto_feature_hint", "先在啟動頁選擇設備，才可設定個別自動開啟功能。"))
+        if hasattr(self, "device_feature_profile_group"):
+            self.device_feature_profile_group.setTitle(t("device_feature_profile_config", "每台設備功能配置"))
+            self.device_feature_profile_info.setText(
+                t("device_feature_profile_hint", "每台設備可獨立切換：對戰、活力策略、斷線重連、自動開啟、定時重開。")
+            )
+            self.batch_auto_battle_check.setText(t("device_feature_auto_battle_short", "對戰"))
+            self.batch_stop_on_low_energy_check.setText(t("device_feature_energy_short", "停補"))
+            self.batch_disconnect_check.setText(t("device_feature_disconnect_short", "重連"))
+            self.batch_auto_features_check.setText(t("device_feature_auto_features_short", "自動開啟"))
+            self.batch_scheduled_restart_check.setText(t("device_feature_scheduled_restart_short", "定時重開"))
+            self.batch_apply_btn.setText(t("device_feature_batch_apply", "批次套用到已選設備"))
         self.emu_path_group.setTitle(t("ldplayer_install_path", "LDPlayer 安裝路徑設定"))
         self.emu_package_group.setTitle(t("disconnect_emu_package_label", "EMU 套件名稱"))
         self.emu_package_label.setText(t("disconnect_emu_package_label", "EMU 套件名稱") + ":")
@@ -259,6 +272,8 @@ class EmuUIMixin:
             btn.setText(t("btn_browse", "瀏覽"))
         self.update_device_energy_settings()
         self.update_device_auto_feature_settings()
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
 
         self.save_btn.setText(t("config_change", "儲存設定"))
         self.reset_btn.setText(t("btn_reset_changes", "重置變更"))
@@ -278,6 +293,8 @@ class EmuUIMixin:
             (self.reconnect_wait_right_form, self.screen_hash_interval_spin, "screen_hash_interval", "辨識畫面間隔"),
             (self.reconnect_wait_left_form, self.action_cooldown_spin, "action_cooldown", "點擊等待時間"),
             (self.reconnect_wait_right_form, self.check_game_open_interval_spin, "check_game_open_interval_minutes", "遊戲開啟檢查間隔(分)"),
+            (self.reconnect_wait_right_form, self.scheduled_restart_hours_spin, "scheduled_restart_hours", "定時重開時數"),
+            (self.reconnect_wait_right_form, self.scheduled_restart_minutes_spin, "scheduled_restart_minutes", "定時重開分鐘"),
             (self.reconnect_wait_left_form, self.login_timeout_spin, "login_timeout", "登入逾時"),
             (self.reconnect_wait_left_form, self.post_login_timeout_spin, "post_login_timeout", "登入後逾時"),
         ]
@@ -775,6 +792,25 @@ class EmuUIMixin:
         self.check_game_open_interval_spin.valueChanged.connect(self.on_config_changed)
         reconnect_wait_right_form.addRow(t("check_game_open_interval_minutes", "遊戲開啟檢查間隔(分)") + ":", self.check_game_open_interval_spin)
 
+        self.scheduled_restart_global_enable_check = QCheckBox(t("scheduled_restart_enable", "啟用定時重開"))
+        self.scheduled_restart_global_enable_check.setChecked(bool(disconnect_cfg.get("scheduled_restart_enabled", False)))
+        self.scheduled_restart_global_enable_check.stateChanged.connect(self.on_config_changed)
+        reconnect_wait_right_form.addRow("", self.scheduled_restart_global_enable_check)
+
+        self.scheduled_restart_hours_spin = QSpinBox()
+        self.scheduled_restart_hours_spin.setRange(0, 23)
+        self.scheduled_restart_hours_spin.setSingleStep(1)
+        self.scheduled_restart_hours_spin.setValue(int(disconnect_cfg.get("scheduled_restart_hours", 0)))
+        self.scheduled_restart_hours_spin.valueChanged.connect(self.on_config_changed)
+        reconnect_wait_right_form.addRow(t("scheduled_restart_hours", "定時重開時數") + ":", self.scheduled_restart_hours_spin)
+
+        self.scheduled_restart_minutes_spin = QSpinBox()
+        self.scheduled_restart_minutes_spin.setRange(0, 59)
+        self.scheduled_restart_minutes_spin.setSingleStep(1)
+        self.scheduled_restart_minutes_spin.setValue(int(disconnect_cfg.get("scheduled_restart_minutes", 0)))
+        self.scheduled_restart_minutes_spin.valueChanged.connect(self.on_config_changed)
+        reconnect_wait_right_form.addRow(t("scheduled_restart_minutes", "定時重開分鐘") + ":", self.scheduled_restart_minutes_spin)
+
         self.login_timeout_spin = QDoubleSpinBox()
         self.login_timeout_spin.setRange(10.0, 600.0)
         self.login_timeout_spin.setDecimals(0)
@@ -856,6 +892,40 @@ class EmuUIMixin:
         self.device_auto_feature_container_layout = QVBoxLayout(self.device_auto_feature_container)
         device_auto_feature_inner.addWidget(self.device_auto_feature_container)
         self.device_auto_feature_group.setLayout(device_auto_feature_inner)
+
+        self.device_feature_profile_group = QGroupBox(t("device_feature_profile_config", "每台設備功能配置"))
+        device_feature_profile_layout = QVBoxLayout()
+        self.device_feature_profile_info = QLabel(
+            t("device_feature_profile_hint", "每台設備可獨立切換：對戰、活力策略、斷線重連、自動開啟、定時重開。")
+        )
+        self.device_feature_profile_info.setStyleSheet("color: #666; font-size: 9pt; line-height: 1.6;")
+        self.device_feature_profile_info.setWordWrap(True)
+        device_feature_profile_layout.addWidget(self.device_feature_profile_info)
+
+        batch_row = QWidget()
+        batch_row_layout = QHBoxLayout(batch_row)
+        batch_row_layout.setContentsMargins(0, 0, 0, 0)
+        self.batch_auto_battle_check = QCheckBox(t("device_feature_auto_battle_short", "對戰"))
+        self.batch_stop_on_low_energy_check = QCheckBox(t("device_feature_energy_short", "停補"))
+        self.batch_disconnect_check = QCheckBox(t("device_feature_disconnect_short", "重連"))
+        self.batch_auto_features_check = QCheckBox(t("device_feature_auto_features_short", "自動開啟"))
+        self.batch_scheduled_restart_check = QCheckBox(t("device_feature_scheduled_restart_short", "定時重開"))
+        self.batch_apply_btn = QPushButton(t("device_feature_batch_apply", "批次套用到已選設備"))
+        self.batch_apply_btn.clicked.connect(self.apply_batch_device_feature_profile)
+        batch_row_layout.addWidget(self.batch_auto_battle_check)
+        batch_row_layout.addWidget(self.batch_stop_on_low_energy_check)
+        batch_row_layout.addWidget(self.batch_disconnect_check)
+        batch_row_layout.addWidget(self.batch_auto_features_check)
+        batch_row_layout.addWidget(self.batch_scheduled_restart_check)
+        batch_row_layout.addWidget(self.batch_apply_btn)
+        batch_row_layout.addStretch()
+        device_feature_profile_layout.addWidget(batch_row)
+
+        self.device_feature_profile_checks = {}
+        self.device_feature_profile_container = QWidget()
+        self.device_feature_profile_container_layout = QVBoxLayout(self.device_feature_profile_container)
+        device_feature_profile_layout.addWidget(self.device_feature_profile_container)
+        self.device_feature_profile_group.setLayout(device_feature_profile_layout)
         self.auto_feature_threshold_keys = [
             "btn_wander_on", "btn_wander_off", "btn_ai", "btn_ai_off_in_battle",
         ]
@@ -1028,6 +1098,7 @@ class EmuUIMixin:
 
         auto_features_group_layout.addWidget(self.disconnect_threshold_section_d_group, 0)
         auto_features_group_layout.addWidget(self.device_auto_feature_group, 0)
+        auto_features_group_layout.addWidget(self.device_feature_profile_group, 0)
         auto_features_group_layout.addStretch()
         self.auto_features_content_group.setLayout(auto_features_group_layout)
 

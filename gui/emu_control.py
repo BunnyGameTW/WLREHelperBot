@@ -128,6 +128,13 @@ class EmuControlMixin:
         for widgets in self.device_auto_feature_checks.values():
             widgets["wander"].setEnabled(enabled)
             widgets["ai"].setEnabled(enabled)
+        if hasattr(self, "device_feature_profile_checks"):
+            for widgets in self.device_feature_profile_checks.values():
+                widgets["auto_battle_enabled"].setEnabled(True)
+                widgets["stop_on_low_energy"].setEnabled(True)
+                widgets["disconnect_enabled"].setEnabled(True)
+                widgets["auto_enable_features_enabled"].setEnabled(True)
+                widgets["scheduled_restart_enabled"].setEnabled(True)
 
     def _update_run_action_guard(self):
         """未儲存設定時禁止啟動或繼續，並在狀態列提示。"""
@@ -209,6 +216,10 @@ class EmuControlMixin:
         elif not self.is_running and not self.config_dirty:
             self.status_label.setText(t("devices_detected_ready", "已偵測到設備，可開始設定或啟動"))
             self.status_label.setStyleSheet("background-color: #90EE90; color: black; padding: 8px; border-radius: 4px;")
+        self.update_device_energy_settings()
+        self.update_device_auto_feature_settings()
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
         self._update_run_action_guard()
 
     def toggle_select_all(self, state):
@@ -248,6 +259,8 @@ class EmuControlMixin:
 
         self.update_device_energy_settings()
         self.update_device_auto_feature_settings()
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
         self._update_run_action_guard()
 
     # ── 機器人控制 ─────────────────────────────────────────────
@@ -298,6 +311,12 @@ class EmuControlMixin:
                 "login_timeout": self.login_timeout_spin.value(),
                 "post_login_timeout": self.post_login_timeout_spin.value(),
                 "in_game_confirm_timeout": self.in_game_confirm_timeout_spin.value(),
+                "scheduled_restart_enabled": self.scheduled_restart_global_enable_check.isChecked()
+                if hasattr(self, "scheduled_restart_global_enable_check") else False,
+                "scheduled_restart_hours": int(self.scheduled_restart_hours_spin.value())
+                if hasattr(self, "scheduled_restart_hours_spin") else 0,
+                "scheduled_restart_minutes": int(self.scheduled_restart_minutes_spin.value())
+                if hasattr(self, "scheduled_restart_minutes_spin") else 0,
             },
         }
         device_configs = {}
@@ -313,6 +332,18 @@ class EmuControlMixin:
             }
         if device_auto_features:
             config["device_auto_features"] = device_auto_features
+        if hasattr(self, "device_feature_profile_checks"):
+            profile_map = {}
+            for serial, widgets in self.device_feature_profile_checks.items():
+                profile_map[serial] = {
+                    "auto_battle_enabled": widgets["auto_battle_enabled"].isChecked(),
+                    "stop_on_low_energy": widgets["stop_on_low_energy"].isChecked(),
+                    "disconnect_enabled": widgets["disconnect_enabled"].isChecked(),
+                    "auto_enable_features_enabled": widgets["auto_enable_features_enabled"].isChecked(),
+                    "scheduled_restart_enabled": widgets["scheduled_restart_enabled"].isChecked(),
+                }
+            if profile_map:
+                config["device_feature_profiles"] = profile_map
         return config
 
     def start_bot(self):
@@ -476,6 +507,8 @@ class EmuControlMixin:
                 rc["device_configs"] = dict(cfg["device_configs"])
             if "device_auto_features" in cfg:
                 rc["device_auto_features"] = dict(cfg["device_auto_features"])
+            if "device_feature_profiles" in cfg:
+                rc["device_feature_profiles"] = dict(cfg["device_feature_profiles"])
             if "thresholds" in cfg:
                 for platform, values in cfg["thresholds"].items():
                     if platform not in rc.get("thresholds", {}):
@@ -525,6 +558,12 @@ class EmuControlMixin:
         self.screen_hash_interval_spin.setEnabled(reconnect_enabled)
         self.action_cooldown_spin.setEnabled(reconnect_enabled)
         self.check_game_open_interval_spin.setEnabled(reconnect_enabled and not self.is_running)
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.scheduled_restart_global_enable_check.setEnabled(reconnect_enabled)
+        if hasattr(self, "scheduled_restart_hours_spin"):
+            self.scheduled_restart_hours_spin.setEnabled(reconnect_enabled)
+        if hasattr(self, "scheduled_restart_minutes_spin"):
+            self.scheduled_restart_minutes_spin.setEnabled(reconnect_enabled)
         self.login_timeout_spin.setEnabled(reconnect_enabled)
         self.post_login_timeout_spin.setEnabled(reconnect_enabled)
         self.auto_enable_features_check.setEnabled(enabled)
@@ -539,6 +578,10 @@ class EmuControlMixin:
             for widgets in self.device_auto_feature_checks.values():
                 widgets["wander"].setEnabled(False)
                 widgets["ai"].setEnabled(False)
+            if hasattr(self, "device_feature_profile_checks"):
+                for widgets in self.device_feature_profile_checks.values():
+                    for cb in widgets.values():
+                        cb.setEnabled(False)
         for key, spinner in self.disconnect_threshold_spinners.items():
             if key in self.auto_feature_threshold_keys:
                 spinner.setEnabled(enabled and self.auto_enable_features_check.isChecked())
@@ -546,6 +589,12 @@ class EmuControlMixin:
                 spinner.setEnabled(reconnect_enabled)
         for check in self.device_energy_checks.values():
             check.setEnabled(enabled)
+        if hasattr(self, "device_feature_profile_checks"):
+            for widgets in self.device_feature_profile_checks.values():
+                for cb in widgets.values():
+                    cb.setEnabled(enabled)
+        if hasattr(self, "batch_apply_btn"):
+            self.batch_apply_btn.setEnabled(enabled)
         for path_input in self.emulator_path_inputs.values():
             path_input.setEnabled(enabled and not self.is_running)
         for btn in self.browse_buttons.values():

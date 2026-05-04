@@ -10,6 +10,7 @@ from copy import deepcopy
 from i18n import t
 
 from gui.shared import resource_path, AUTOPVE_AVAILABLE
+from gui.device_feature_shared import clear_layout_widgets, build_device_feature_row
 
 if AUTOPVE_AVAILABLE:
     import autoPVE
@@ -43,6 +44,7 @@ class PCConfigMixin:
             "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
             "restart_game_enabled", "login_game_enabled", "screen_hash_diff_threshold",
             "screen_hash_interval", "action_cooldown", "check_game_open_interval_pc", "login_timeout", "post_login_timeout",
+            "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
         }
         auto_feature_disconnect_keys = {
             "auto_enable_features_enabled", "auto_enable_wander", "auto_enable_ai",
@@ -84,6 +86,9 @@ class PCConfigMixin:
             for key in auto_feature_disconnect_keys:
                 if key in current_disconnect:
                     disconnect_data[key] = current_disconnect[key]
+            config_data["device_feature_profiles"] = deepcopy(
+                current_snapshot.get("device_feature_profiles", config_data.get("device_feature_profiles", {}))
+            )
 
     def _update_baseline_by_scope(self, baseline, source, scope):
         """只更新指定範圍到 baseline，保留其他未儲存分頁差異。"""
@@ -103,6 +108,7 @@ class PCConfigMixin:
             "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
             "restart_game_enabled", "login_game_enabled", "screen_hash_diff_threshold",
             "screen_hash_interval", "action_cooldown", "check_game_open_interval_pc", "login_timeout", "post_login_timeout",
+            "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
         }
         auto_feature_disconnect_keys = {
             "auto_enable_features_enabled", "auto_enable_wander", "auto_enable_ai",
@@ -140,6 +146,7 @@ class PCConfigMixin:
             for key in auto_feature_disconnect_keys:
                 if key in source.get("disconnect", {}):
                     baseline.setdefault("disconnect", {})[key] = source["disconnect"][key]
+            baseline["device_feature_profiles"] = deepcopy(source.get("device_feature_profiles", {}))
         return baseline
 
     def _collect_current_config(self):
@@ -173,8 +180,29 @@ class PCConfigMixin:
                 "login_timeout": self.login_timeout_spin.value(),
                 "post_login_timeout": self.post_login_timeout_spin.value(),
                 "in_game_confirm_timeout": self.in_game_confirm_timeout_spin.value(),
+                "scheduled_restart_enabled": self.scheduled_restart_global_enable_check.isChecked()
+                if hasattr(self, "scheduled_restart_global_enable_check") else False,
+                "scheduled_restart_hours": int(self.scheduled_restart_hours_spin.value())
+                if hasattr(self, "scheduled_restart_hours_spin") else 0,
+                "scheduled_restart_minutes": int(self.scheduled_restart_minutes_spin.value())
+                if hasattr(self, "scheduled_restart_minutes_spin") else 0,
             },
+            "device_feature_profiles": self._collect_device_feature_profiles(),
         }
+
+    def _collect_device_feature_profiles(self):
+        profiles = {}
+        if not hasattr(self, "device_feature_profile_checks"):
+            return profiles
+        for device_id, widgets in self.device_feature_profile_checks.items():
+            profiles[device_id] = {
+                "auto_battle_enabled": widgets["auto_battle_enabled"].isChecked(),
+                "stop_on_low_energy": widgets["stop_on_low_energy"].isChecked(),
+                "disconnect_enabled": widgets["disconnect_enabled"].isChecked(),
+                "auto_enable_features_enabled": widgets["auto_enable_features_enabled"].isChecked(),
+                "scheduled_restart_enabled": widgets["scheduled_restart_enabled"].isChecked(),
+            }
+        return profiles
 
     def _load_default_config(self):
         """讀取預設配置，並另外保留純預設供「恢復預設」使用。"""
@@ -199,10 +227,12 @@ class PCConfigMixin:
                 "pc_launch_wait_timeout": 60.0, "restart_game_enabled": True,
                 "login_game_enabled": True, "auto_enable_features_enabled": True,
                 "auto_enable_wander": True, "auto_enable_ai": True,
+                "scheduled_restart_enabled": False, "scheduled_restart_hours": 0, "scheduled_restart_minutes": 0,
                 "pc_exe_path": "", "emu_package_name": "",
                 "action_cooldown": 0.5,
                 "in_game_confirm_timeout": 60.0,
             },
+            "device_feature_profiles": {},
         }
         base = fallback
         try:
@@ -236,6 +266,8 @@ class PCConfigMixin:
                 saved_disconnect = dict(saved.get("disconnect", {}))
                 saved_disconnect.pop("server_click_point", None)
                 base.setdefault("disconnect", {}).update(saved_disconnect)
+            if "device_feature_profiles" in saved:
+                base["device_feature_profiles"] = saved.get("device_feature_profiles", {})
         except Exception:
             pass
 
@@ -329,6 +361,7 @@ class PCConfigMixin:
             "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
             "restart_game_enabled", "login_game_enabled", "screen_hash_diff_threshold",
             "screen_hash_interval", "action_cooldown", "check_game_open_interval_pc", "login_timeout", "post_login_timeout",
+            "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
         }
         auto_feature_disconnect_keys = {
             "auto_enable_features_enabled", "auto_enable_wander", "auto_enable_ai",
@@ -364,6 +397,7 @@ class PCConfigMixin:
             for key in auto_feature_disconnect_keys:
                 if key in baseline.get("disconnect", {}):
                     target["disconnect"][key] = baseline["disconnect"][key]
+            target["device_feature_profiles"] = deepcopy(baseline.get("device_feature_profiles", {}))
 
         self._apply_snapshot_to_ui(target)
 
@@ -419,6 +453,15 @@ class PCConfigMixin:
         self.login_timeout_spin.setValue(float(disconnect.get("login_timeout", self.login_timeout_spin.value())))
         self.post_login_timeout_spin.setValue(float(disconnect.get("post_login_timeout", self.post_login_timeout_spin.value())))
         self.in_game_confirm_timeout_spin.setValue(float(disconnect.get("in_game_confirm_timeout", self.in_game_confirm_timeout_spin.value())))
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.scheduled_restart_global_enable_check.setChecked(bool(disconnect.get("scheduled_restart_enabled", False)))
+        if hasattr(self, "scheduled_restart_hours_spin"):
+            self.scheduled_restart_hours_spin.setValue(int(disconnect.get("scheduled_restart_hours", 0)))
+        if hasattr(self, "scheduled_restart_minutes_spin"):
+            self.scheduled_restart_minutes_spin.setValue(int(disconnect.get("scheduled_restart_minutes", 0)))
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self._cached_device_feature_profiles = deepcopy(snapshot.get("device_feature_profiles", {}))
+            self.update_device_feature_profile_settings()
 
     def restore_defaults(self):
         """恢復預設：僅套用目前頁籤。"""
@@ -440,6 +483,7 @@ class PCConfigMixin:
             "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
             "restart_game_enabled", "login_game_enabled", "screen_hash_diff_threshold",
             "screen_hash_interval", "action_cooldown", "check_game_open_interval_pc", "login_timeout", "post_login_timeout",
+            "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
         }
         auto_feature_disconnect_keys = {
             "auto_enable_features_enabled", "auto_enable_wander", "auto_enable_ai",
@@ -479,6 +523,9 @@ class PCConfigMixin:
             elif scope == "config_2" and key in auto_feature_disconnect_keys:
                 target["disconnect"][key] = disconnect_defaults[key]
 
+        if scope == "config_2":
+            target["device_feature_profiles"] = {}
+
         self._apply_snapshot_to_ui(target)
 
         after = self._collect_current_config()
@@ -496,3 +543,60 @@ class PCConfigMixin:
         if hasattr(self, "_update_run_action_guard"):
             self._update_run_action_guard()
         self.append_log("[CONFIG] " + t("btn_restore_defaults", "已恢復預設設定"))
+
+    def _default_device_feature_profile(self):
+        return {
+            "auto_battle_enabled": bool(self.auto_battle_enable_check.isChecked()),
+            "stop_on_low_energy": bool(self.energy_check.isChecked()),
+            "disconnect_enabled": bool(self.disconnect_enable_check.isChecked()),
+            "auto_enable_features_enabled": bool(self.auto_enable_features_check.isChecked()),
+            "scheduled_restart_enabled": bool(
+                self.scheduled_restart_global_enable_check.isChecked()
+                if hasattr(self, "scheduled_restart_global_enable_check") else False
+            ),
+        }
+
+    def _selected_pc_device_ids(self):
+        return [f"PC-{int(hwnd)}" for hwnd in getattr(self, "selected_windows", [])]
+
+    def update_device_feature_profile_settings(self):
+        if not hasattr(self, "device_feature_profile_container_layout"):
+            return
+        clear_layout_widgets(self.device_feature_profile_container_layout)
+        self.device_feature_profile_checks = {}
+
+        selected_ids = self._selected_pc_device_ids()
+        if not selected_ids:
+            from PyQt5.QtWidgets import QLabel
+            empty_label = QLabel(t("device_feature_empty", "尚未選擇任何設備。請先在「啟動」頁選擇設備。"))
+            self.device_feature_profile_container_layout.addWidget(empty_label)
+            return
+
+        defaults = self._default_device_feature_profile()
+        snapshot_profiles = getattr(self, "_cached_device_feature_profiles", None)
+        if snapshot_profiles is None:
+            snapshot_profiles = self._collect_current_config().get("device_feature_profiles", {})
+
+        for device_id in selected_ids:
+            hwnd = int(device_id.split("-")[-1])
+            title = self.window_map.get(hwnd, device_id)
+            profile = dict(defaults)
+            profile.update(snapshot_profiles.get(device_id, {}))
+            row, widgets = build_device_feature_row(title, profile, self.on_config_changed, t)
+            self.device_feature_profile_container_layout.addWidget(row)
+            self.device_feature_profile_checks[device_id] = widgets
+
+    def apply_batch_device_feature_profile(self):
+        if not hasattr(self, "device_feature_profile_checks"):
+            return
+        batch = {
+            "auto_battle_enabled": self.batch_auto_battle_check.isChecked(),
+            "stop_on_low_energy": self.batch_stop_on_low_energy_check.isChecked(),
+            "disconnect_enabled": self.batch_disconnect_check.isChecked(),
+            "auto_enable_features_enabled": self.batch_auto_features_check.isChecked(),
+            "scheduled_restart_enabled": self.batch_scheduled_restart_check.isChecked(),
+        }
+        for widgets in self.device_feature_profile_checks.values():
+            for key, val in batch.items():
+                widgets[key].setChecked(bool(val))
+        self.on_config_changed()

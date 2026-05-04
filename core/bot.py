@@ -31,6 +31,7 @@ class DriftBot(threading.Thread):
         self.name = name
         self.device = device
         self.hwnd = hwnd
+        self.device_id = self._resolve_device_id()
         self.running = True
         self.waiting_for_battle = False
         self.wait_battle_start_time = 0
@@ -49,6 +50,7 @@ class DriftBot(threading.Thread):
         )
         self.device_auto_features = device_auto_features  # {"wander": bool, "ai": bool} or None
         self.auto_battle_enabled = bool(_config.RUNNING_CONFIG.get("auto_battle_enabled", True))
+        self.device_feature_overrides = None
         self.last_energy_state = None
 
         self.perf_monitor = PerformanceMonitor(name)
@@ -66,15 +68,39 @@ class DriftBot(threading.Thread):
         # hwnd 變更回調（供 GUI 更新視窗資訊）
         self.on_hwnd_changed = None
 
+    def _resolve_device_id(self):
+        """產生與設定檔一致的設備 ID。"""
+        if self.mode == "2" and self.device is not None:
+            serial = getattr(self.device, "serial", "")
+            return str(serial or self.name)
+        if self.mode == "1":
+            hwnd = int(self.hwnd or 0)
+            return f"PC-{hwnd}" if hwnd > 0 else str(self.name)
+        return str(self.name)
+
     def refresh_runtime_config(self):
         """同步執行中的可熱更新設定（暫停修改後可直接套用）。"""
         try:
             cfg = _config.RUNNING_CONFIG
             self.thresholds = cfg.get("thresholds", {}).get(self.platform, self.thresholds)
+            profile = cfg.get("device_feature_profiles", {}).get(self.device_id, {})
+            if profile:
+                self.device_feature_overrides = {
+                    "disconnect_enabled": bool(profile.get("disconnect_enabled", True)),
+                    "auto_enable_features_enabled": bool(profile.get("auto_enable_features_enabled", True)),
+                    "scheduled_restart_enabled": bool(profile.get("scheduled_restart_enabled", False)),
+                }
+                self.auto_battle_enabled = bool(profile.get("auto_battle_enabled", self.auto_battle_enabled))
+            else:
+                self.device_feature_overrides = None
             if self.mode == "2" and self.device is not None:
                 serial = getattr(self.device, "serial", None)
                 per_device_strategy = cfg.get("device_configs", {}).get(serial)
-                if per_device_strategy is not None:
+                profile_strategy = profile.get("stop_on_low_energy") if profile else None
+                if profile_strategy is not None:
+                    self._device_config_strategy_override = bool(profile_strategy)
+                    self.stop_on_low_energy = bool(profile_strategy)
+                elif per_device_strategy is not None:
                     self._device_config_strategy_override = bool(per_device_strategy)
                     self.stop_on_low_energy = bool(per_device_strategy)
                 elif self._device_config_strategy_override is None:
@@ -91,9 +117,16 @@ class DriftBot(threading.Thread):
                     }
                 else:
                     self.device_auto_features = None
-            elif self._device_config_strategy_override is None:
-                self.stop_on_low_energy = cfg.get("energy_strategy", self.stop_on_low_energy)
-            self.auto_battle_enabled = bool(cfg.get("auto_battle_enabled", self.auto_battle_enabled))
+            elif self.mode == "1":
+                profile_strategy = profile.get("stop_on_low_energy") if profile else None
+                if profile_strategy is not None:
+                    self._device_config_strategy_override = bool(profile_strategy)
+                    self.stop_on_low_energy = bool(profile_strategy)
+                elif self._device_config_strategy_override is None:
+                    self.stop_on_low_energy = cfg.get("energy_strategy", self.stop_on_low_energy)
+
+            if not profile:
+                self.auto_battle_enabled = bool(cfg.get("auto_battle_enabled", self.auto_battle_enabled))
             if self.disconnect_handler is not None:
                 self.disconnect_handler.refresh_config()
         except Exception as e:

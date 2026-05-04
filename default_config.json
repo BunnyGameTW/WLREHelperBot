@@ -70,6 +70,7 @@
         }
     },
     "device_configs": {},
+    "device_feature_profiles": {},
     "disconnect": {
         "enabled": true,
         "same_screen_timeout": 45.0,
@@ -85,6 +86,9 @@
         "post_login_timeout": 45.0,
         "in_game_confirm_timeout": 25.0,
         "pc_launch_wait_timeout": 25.0,
+        "scheduled_restart_enabled": false,
+        "scheduled_restart_hours": 0,
+        "scheduled_restart_minutes": 0,
         "pc_exe_path": "",
         "emu_package_name": ""
     }

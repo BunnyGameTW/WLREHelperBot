@@ -10,6 +10,7 @@ from copy import deepcopy
 from i18n import t
 
 from gui.shared import resource_path, AUTOPVE_AVAILABLE, autoPVE
+from gui.device_feature_shared import clear_layout_widgets, build_device_feature_row
 
 
 class EmuConfigMixin:
@@ -58,6 +59,7 @@ class EmuConfigMixin:
                 "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
                 "restart_game_enabled", "login_game_enabled", "emu_package_name", "screen_hash_diff_threshold",
                 "screen_hash_interval", "action_cooldown", "check_game_open_interval_emu", "login_timeout", "post_login_timeout",
+                "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
             ):
                 if key in source.get("disconnect", {}):
                     baseline.setdefault("disconnect", {})[key] = source["disconnect"][key]
@@ -74,6 +76,7 @@ class EmuConfigMixin:
                 if key in source.get("disconnect", {}):
                     baseline.setdefault("disconnect", {})[key] = source["disconnect"][key]
             baseline["device_auto_features"] = deepcopy(source.get("device_auto_features", {}))
+            baseline["device_feature_profiles"] = deepcopy(source.get("device_feature_profiles", {}))
         return baseline
 
     def _load_default_config(self):
@@ -103,6 +106,9 @@ class EmuConfigMixin:
                 "same_screen_timeout": 45.0,
                 "max_reconnect_attempts": 5,
                 "pc_launch_wait_timeout": 25.0,
+                "scheduled_restart_enabled": False,
+                "scheduled_restart_hours": 0,
+                "scheduled_restart_minutes": 0,
                 "restart_game_enabled": True,
                 "login_game_enabled": True,
                 "auto_enable_features_enabled": True,
@@ -111,6 +117,7 @@ class EmuConfigMixin:
                 "pc_exe_path": "",
                 "emu_package_name": "",
             },
+            "device_feature_profiles": {},
         }
         try:
             with open(resource_path("default_config_emu.json"), "r", encoding="utf-8") as f:
@@ -140,6 +147,8 @@ class EmuConfigMixin:
                     self.current_config["device_strategies"] = config_data["device_strategies"]
                 if "device_auto_features" in config_data:
                     self.current_config["device_auto_features"] = config_data["device_auto_features"]
+                if "device_feature_profiles" in config_data:
+                    self.current_config["device_feature_profiles"] = config_data["device_feature_profiles"]
                 if "thresholds" in config_data and "EMU" in config_data["thresholds"]:
                     self.current_config["thresholds_emu"].update(config_data["thresholds"]["EMU"])
                 if "disconnect" in config_data:
@@ -165,6 +174,7 @@ class EmuConfigMixin:
             config_data["auto_battle_enabled"] = self.current_config["auto_battle_enabled"]
             config_data["device_strategies"] = self.current_config["device_strategies"]
             config_data["device_auto_features"] = self.current_config["device_auto_features"]
+            config_data["device_feature_profiles"] = self.current_config.get("device_feature_profiles", {})
 
             if "thresholds" not in config_data:
                 config_data["thresholds"] = {}
@@ -247,6 +257,12 @@ class EmuConfigMixin:
         self.current_config["disconnect"]["login_timeout"] = self.login_timeout_spin.value()
         self.current_config["disconnect"]["post_login_timeout"] = self.post_login_timeout_spin.value()
         self.current_config["disconnect"]["in_game_confirm_timeout"] = self.in_game_confirm_timeout_spin.value()
+        if hasattr(self, "scheduled_restart_hours_spin"):
+            self.current_config["disconnect"]["scheduled_restart_hours"] = int(self.scheduled_restart_hours_spin.value())
+        if hasattr(self, "scheduled_restart_minutes_spin"):
+            self.current_config["disconnect"]["scheduled_restart_minutes"] = int(self.scheduled_restart_minutes_spin.value())
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.current_config["disconnect"]["scheduled_restart_enabled"] = self.scheduled_restart_global_enable_check.isChecked()
 
         emu_paths = {}
         for key, path_input in self.emulator_path_inputs.items():
@@ -266,6 +282,17 @@ class EmuConfigMixin:
                 "wander": widgets["wander"].isChecked(),
                 "ai": widgets["ai"].isChecked(),
             }
+
+        if hasattr(self, "device_feature_profile_checks"):
+            self.current_config.setdefault("device_feature_profiles", {})
+            for serial, widgets in self.device_feature_profile_checks.items():
+                self.current_config["device_feature_profiles"][serial] = {
+                    "auto_battle_enabled": widgets["auto_battle_enabled"].isChecked(),
+                    "stop_on_low_energy": widgets["stop_on_low_energy"].isChecked(),
+                    "disconnect_enabled": widgets["disconnect_enabled"].isChecked(),
+                    "auto_enable_features_enabled": widgets["auto_enable_features_enabled"].isChecked(),
+                    "scheduled_restart_enabled": widgets["scheduled_restart_enabled"].isChecked(),
+                }
 
         self.update_current_config_display()
 
@@ -329,6 +356,7 @@ class EmuConfigMixin:
                     "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
                     "restart_game_enabled", "login_game_enabled", "emu_package_name", "screen_hash_diff_threshold",
                     "screen_hash_interval", "action_cooldown", "check_game_open_interval_emu", "login_timeout", "post_login_timeout",
+                    "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
                 ):
                     if key in self.current_config.get("disconnect", {}):
                         config_data["disconnect"][key] = self.current_config["disconnect"][key]
@@ -345,6 +373,7 @@ class EmuConfigMixin:
                     if key in self.current_config.get("disconnect", {}):
                         config_data["disconnect"][key] = self.current_config["disconnect"][key]
                 config_data["device_auto_features"] = deepcopy(self.current_config.get("device_auto_features", {}))
+                config_data["device_feature_profiles"] = deepcopy(self.current_config.get("device_feature_profiles", {}))
 
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=2, ensure_ascii=False)
@@ -393,6 +422,7 @@ class EmuConfigMixin:
             "enabled", "same_screen_timeout", "max_reconnect_attempts", "pc_launch_wait_timeout",
             "restart_game_enabled", "login_game_enabled", "emu_package_name", "screen_hash_diff_threshold",
             "screen_hash_interval", "action_cooldown", "check_game_open_interval_emu", "login_timeout", "post_login_timeout",
+            "scheduled_restart_enabled", "scheduled_restart_hours", "scheduled_restart_minutes",
         }
         auto_feature_disconnect_keys = {
             "auto_enable_features_enabled", "auto_enable_wander", "auto_enable_ai",
@@ -430,11 +460,14 @@ class EmuConfigMixin:
                 if key in baseline.get("disconnect", {}):
                     target.setdefault("disconnect", {})[key] = baseline["disconnect"][key]
             target["device_auto_features"] = deepcopy(baseline.get("device_auto_features", {}))
+            target["device_feature_profiles"] = deepcopy(baseline.get("device_feature_profiles", {}))
 
         self.current_config = deepcopy(target)
         self._apply_config_to_widgets(target)
         self.update_device_energy_settings()
         self.update_device_auto_feature_settings()
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
         self.update_current_config_display()
         self.config_dirty = (self.current_config != baseline)
         self.save_btn.setEnabled(self.config_dirty)
@@ -495,6 +528,13 @@ class EmuConfigMixin:
 
         self.current_config["device_strategies"] = deepcopy(config_obj.get("device_strategies", {}))
         self.current_config["device_auto_features"] = deepcopy(config_obj.get("device_auto_features", {}))
+        self.current_config["device_feature_profiles"] = deepcopy(config_obj.get("device_feature_profiles", {}))
+        if hasattr(self, "scheduled_restart_hours_spin"):
+            self.scheduled_restart_hours_spin.setValue(int(disconnect_cfg.get("scheduled_restart_hours", 0)))
+        if hasattr(self, "scheduled_restart_minutes_spin"):
+            self.scheduled_restart_minutes_spin.setValue(int(disconnect_cfg.get("scheduled_restart_minutes", 0)))
+        if hasattr(self, "scheduled_restart_global_enable_check"):
+            self.scheduled_restart_global_enable_check.setChecked(bool(disconnect_cfg.get("scheduled_restart_enabled", False)))
 
     def restore_defaults(self):
         """恢復預設：僅套用目前選中分頁的預設值。"""
@@ -578,11 +618,18 @@ class EmuConfigMixin:
             auto_serials = set(target["device_auto_features"].keys()) | set(self.selected_devices)
             for serial in auto_serials:
                 target["device_auto_features"][serial] = dict(auto_defaults)
+            profile_default = self._default_device_feature_profile()
+            target.setdefault("device_feature_profiles", {})
+            profile_serials = set(target["device_feature_profiles"].keys()) | set(self.selected_devices)
+            for serial in profile_serials:
+                target["device_feature_profiles"][serial] = dict(profile_default)
 
         self.current_config = deepcopy(target)
         self._apply_config_to_widgets(target)
         self.update_device_energy_settings()
         self.update_device_auto_feature_settings()
+        if hasattr(self, "update_device_feature_profile_settings"):
+            self.update_device_feature_profile_settings()
         self.update_current_config_display()
         self._update_auto_battle_tab_enabled()
         self._update_reconnect_tab_enabled()
@@ -672,3 +719,57 @@ class EmuConfigMixin:
             row_layout.addWidget(ai_check)
             row_layout.addStretch()
             self.device_auto_feature_container_layout.addWidget(row)
+
+    def _default_device_feature_profile(self):
+        """回傳新設備功能開關預設值。"""
+        return {
+            "auto_battle_enabled": bool(self.auto_battle_enable_check.isChecked()),
+            "stop_on_low_energy": bool(self.energy_check.isChecked()),
+            "disconnect_enabled": bool(self.disconnect_enable_check.isChecked()),
+            "auto_enable_features_enabled": bool(self.auto_enable_features_check.isChecked()),
+            "scheduled_restart_enabled": bool(
+                getattr(self, "scheduled_restart_global_enable_check", self.disconnect_enable_check).isChecked()
+                if hasattr(self, "scheduled_restart_global_enable_check")
+                else False
+            ),
+        }
+
+    def update_device_feature_profile_settings(self):
+        """更新每設備功能配置（共用於 PC/EMU）。"""
+        if not hasattr(self, "device_feature_profile_container_layout"):
+            return
+        clear_layout_widgets(self.device_feature_profile_container_layout)
+        self.device_feature_profile_checks = {}
+
+        selected = list(getattr(self, "selected_devices", []) or [])
+        if not selected:
+            from PyQt5.QtWidgets import QLabel
+            empty_label = QLabel(t("device_feature_empty", "尚未選擇任何設備。請先在「啟動」頁選擇設備。"))
+            self.device_feature_profile_container_layout.addWidget(empty_label)
+            return
+
+        defaults = self._default_device_feature_profile()
+        profile_map = self.current_config.setdefault("device_feature_profiles", {})
+        for serial in selected:
+            device_name = self.device_map.get(serial, {}).get("name", serial)
+            profile = dict(defaults)
+            profile.update(profile_map.get(serial, {}))
+            row, widgets = build_device_feature_row(device_name, profile, self.on_config_changed, t)
+            self.device_feature_profile_container_layout.addWidget(row)
+            self.device_feature_profile_checks[serial] = widgets
+
+    def apply_batch_device_feature_profile(self):
+        """將批次開關套用到目前選擇的設備。"""
+        if not hasattr(self, "device_feature_profile_checks"):
+            return
+        batch = {
+            "auto_battle_enabled": self.batch_auto_battle_check.isChecked(),
+            "stop_on_low_energy": self.batch_stop_on_low_energy_check.isChecked(),
+            "disconnect_enabled": self.batch_disconnect_check.isChecked(),
+            "auto_enable_features_enabled": self.batch_auto_features_check.isChecked(),
+            "scheduled_restart_enabled": self.batch_scheduled_restart_check.isChecked(),
+        }
+        for widgets in self.device_feature_profile_checks.values():
+            for key, val in batch.items():
+                widgets[key].setChecked(bool(val))
+        self.on_config_changed()
