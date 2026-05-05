@@ -34,6 +34,7 @@ class DriftBot(threading.Thread):
         self.running = True
         self.waiting_for_battle = False
         self.wait_battle_start_time = 0
+        self.was_paused = False
 
         self.real_w = BASE_W
         self.real_h = BASE_H
@@ -318,9 +319,17 @@ class DriftBot(threading.Thread):
             try:
                 # 檢查暫停狀態
                 with _state.LOCK:
-                    if _state.PAUSED:
-                        self._interruptible_sleep(0.5)
-                        continue
+                    current_paused = _state.PAUSED
+
+                if current_paused:
+                    self.was_paused = True
+                    self._interruptible_sleep(0.5)
+                    continue
+                else:
+                    if self.was_paused:
+                        self.was_paused = False
+                        if self.disconnect_handler is not None:
+                            self.disconnect_handler._reset_screen_tracking(None)
 
                 # EMU 重連流程 A 的關閉/啟動/暖機步驟不依賴畫面；
                 # 先推進 recovery，可避免 screencap 卡住導致流程停滯。
