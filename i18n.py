@@ -18,6 +18,7 @@ class I18n:
         """
         self.language = language
         self.translations = {}
+        self._current_dict = {}
         self._load_translations()
     
     def _load_translations(self):
@@ -38,6 +39,21 @@ class I18n:
         except Exception as e:
             print(f"[ERROR] 加載翻譯失敗: {e}")
             self.translations = {"zh_TW": {}}
+        self._refresh_current_dict()
+
+    def _refresh_current_dict(self):
+        """根據當前語言刷新活動翻譯字典"""
+        if self.language in self.translations:
+            self._current_dict = self.translations[self.language]
+            return
+
+        # 如果當前語言不存在，嘗試使用英文或中文作為回退
+        for lang in ["en", "zh_TW", "zh_CN"]:
+            if lang in self.translations:
+                self._current_dict = self.translations[lang]
+                return
+
+        self._current_dict = {}
     
     def get(self, key: str, default: str = "") -> str:
         """
@@ -49,15 +65,7 @@ class I18n:
         Returns:
             翻譯後的字符串
         """
-        if self.language in self.translations:
-            return self.translations[self.language].get(key, default or key)
-        
-        # 如果當前語言不存在，嘗試返回英文或中文
-        for lang in ["en", "zh_TW", "zh_CN"]:
-            if lang in self.translations:
-                return self.translations[lang].get(key, default or key)
-        
-        return default or key
+        return self._current_dict.get(key, default or key)
     
     def set_language(self, language: str):
         """
@@ -67,6 +75,7 @@ class I18n:
         """
         if language in self.translations:
             self.language = language
+            self._refresh_current_dict()
         else:
             print(f"[WARN] 不支援的語言: {language}")
     
