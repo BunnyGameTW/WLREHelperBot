@@ -248,11 +248,32 @@ def find_pc_game_windows():
     """搜尋所有 PC 遊戲視窗"""
     PC_WINDOWS.clear()
 
+    try:
+        import win32process
+        import psutil
+    except ImportError:
+        win32process = None
+        psutil = None
+
     def enum_windows(hwnd, _lParam):
         if win32gui.IsWindowVisible(hwnd):
             title = win32gui.GetWindowText(hwnd)
-            if title and len(title) > 0 and WINDOW_TITLE in title:
-                PC_WINDOWS[hwnd] = title
+            if title and len(title) > 0:
+                if win32process and psutil:
+                    try:
+                        from core.constants import GAME_EXE_NAME
+                        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                        process = psutil.Process(pid)
+                        exe_name = process.name()
+                        # Only judge by exe name to avoid matching web browsers with the same title
+                        if GAME_EXE_NAME.lower() in exe_name.lower() or "main.exe" in exe_name.lower():
+                            PC_WINDOWS[hwnd] = title
+                    except Exception:
+                        pass
+                else:
+                    # Fallback to title check only if we don't have psutil/win32process available
+                    if WINDOW_TITLE in title:
+                        PC_WINDOWS[hwnd] = title
         return True
 
     win32gui.EnumWindows(enum_windows, None)

@@ -10,6 +10,9 @@ BASE_W, BASE_H = 1275, 755
 # 視窗標題
 WINDOW_TITLE = "飄流幻境Re:星之方舟"
 
+# 遊戲執行檔名稱
+GAME_EXE_NAME = "飄流幻境Re_星之方舟.exe"
+
 # 預設比對門檻
 THRESHOLD = 0.80
 
