@@ -23,11 +23,30 @@ class WindowManager:
         """查找所有遊戲窗口"""
         self.windows.clear()
         
+        try:
+            import win32process
+            import psutil
+        except ImportError:
+            win32process = None
+            psutil = None
+
         def enum_windows(hwnd, lParam):
             if win32gui.IsWindowVisible(hwnd):
                 title = win32gui.GetWindowText(hwnd)
-                if title and self.window_title in title:
-                    self.windows[hwnd] = title
+                if title and len(title) > 0:
+                    if win32process and psutil:
+                        try:
+                            from core.constants import GAME_EXE_NAME
+                            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                            process = psutil.Process(pid)
+                            exe_name = process.name()
+                            if GAME_EXE_NAME.lower() in exe_name.lower() or "main.exe" in exe_name.lower():
+                                self.windows[hwnd] = title
+                        except Exception:
+                            pass
+                    else:
+                        if self.window_title in title:
+                            self.windows[hwnd] = title
             return True
         
         try:

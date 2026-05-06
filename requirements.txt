@@ -6,3 +6,4 @@ pydirectinput
 pure-python-adb
 keyboard==0.13.5
 pyaudio==0.2.13
+psutil
