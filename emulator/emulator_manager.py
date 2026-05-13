@@ -8,11 +8,9 @@ import subprocess
 import os
 import time
 import json
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import re
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 class EmulatorDeviceManager:
     """模擬器設備管理"""
